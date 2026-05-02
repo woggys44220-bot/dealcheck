@@ -223,10 +223,16 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  if(isToolGood && !(ask<=categoryFloor*0.8)) score=Math.min(score,70);
  if(isToolGood && ask>=50 && net<=minMargin+8 && net>0) decision='NÉGOCIE';
  if(isPhone && askRatioToFloor>=2.6 && net>=minMargin) decision='NÉGOCIE';
+ const isBorderlineToolDeal = decision==='LAISSE TOMBER' && form.category==='outil' && form.condition==='bon' && gross>0 && ease==='bon' && net>=-5 && net<=5;
+ if(isBorderlineToolDeal){
+  decision='NÉGOCIE';
+  score=clamp(48 + (net * 1.2),40,55);
+  strategy='Deal limite : pas rentable au prix actuel, mais intéressant si tu négocies plus bas.';
+ }
  if(isPhone){strategy='Vérifie IMEI, iCloud, batterie, facture, opérateur et état écran avant achat.';}
- if(isToolGood){strategy='Bon objet à revendre, mais vérifie batterie, chargeur, marque, puissance et fonctionnement. Négocie si possible.';}
+ if(isToolGood && !isBorderlineToolDeal){strategy='Bon objet à revendre, mais vérifie batterie, chargeur, marque, puissance et fonctionnement. Négocie si possible.';}
  if(decision==='LAISSE TOMBER' && net<0 && resale>0){score=clamp(Math.max(score,15),10,20);}
- const realisticRange=isDamagedBulky?[0.4,0.6]:isDamaged?[0.45,0.65]:ease==='bon'?[0.7,0.8]:[0.6,0.85];
+ const realisticRange=isPhone && decision==='NÉGOCIE'?[0.85,0.95]:isBorderlineToolDeal?[0.75,0.82]:isDamagedBulky?[0.4,0.6]:isDamaged?[0.45,0.65]:ease==='bon'?[0.7,0.8]:[0.6,0.85];
  const suggestedOffer=Math.round(ask*((realisticRange[0]+realisticRange[1])/2));
  const displayMaxBuy=hasUsableMaxBuy?`${roundedMaxBuy} $`:'Non rentable';
  const displayOffer=decision==='NÉGOCIE'?`${suggestedOffer} $`:decision==='ACHÈTE'?'Prix demandé correct':'Non rentable';
