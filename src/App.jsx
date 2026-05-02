@@ -205,7 +205,11 @@ function computeSell(form) {
   return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint };
 }
 
-function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const timeCost=hours*5; const isDamaged=form.condition==='abîmé'; const isBulky=form.category==='meuble' || form.category==='électroménager'; const isDamagedBulky=isBulky && isDamaged; const baseMultiplier=categoryResaleMultiplier[form.category]||1; const conditionImpact=1+conditionCoef[form.condition]*0.3; const damagedPenalty=isDamaged?0.72:1; const bulkyPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct')?0.9:1; const priceBasedResale=ask*baseMultiplier*conditionImpact*damagedPenalty*bulkyPenalty; const floorBase=(flipResaleFloorByCategory[form.category]||0)*(flipResaleFloorConditionMultiplier[form.condition]||1); const adjustedFloor=isDamagedBulky?floorBase*0.75:isDamaged?floorBase*0.85:floorBase; const resale=Math.max(priceBasedResale,adjustedFloor); const gross=resale-ask; const net=resale-ask-costs-timeCost; const maxBuy=resale-costs-timeCost-minMargin; const ease=easeByCategory[form.category]; const bulkyRiskPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct'); const risk = isDamaged || ease==='difficile' || form.category==='téléphone' || bulkyRiskPenalty ? 'élevé' : ease==='niche' ? 'moyen' : 'faible';
+function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const timeCost=hours*5; const isDamaged=form.condition==='abîmé'; const isBulky=form.category==='meuble' || form.category==='électroménager'; const isDamagedBulky=isBulky && isDamaged; const isPhone=form.category==='téléphone'; const isToolGood=form.category==='outil' && form.condition==='bon'; const baseMultiplier=categoryResaleMultiplier[form.category]||1; const conditionImpact=1+conditionCoef[form.condition]*0.3; const damagedPenalty=isDamaged?0.72:1; const bulkyPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct')?0.9:1; const basePriceResale=ask*baseMultiplier*conditionImpact*damagedPenalty*bulkyPenalty; const floorBase=(flipResaleFloorByCategory[form.category]||0)*(flipResaleFloorConditionMultiplier[form.condition]||1); const adjustedFloor=isDamagedBulky?floorBase*0.75:isDamaged?floorBase*0.85:floorBase;
+ const categoryFloor=flipResaleFloorByCategory[form.category]||0; const askRatioToFloor=categoryFloor>0?ask/categoryFloor:1;
+ const conservativePricePenalty=askRatioToFloor>=1.5?0.82:askRatioToFloor>=1.15?0.9:1;
+ const phonePenalty=isPhone?0.9:1; const toolPenalty=isToolGood?0.92:1; const priceBasedResale=basePriceResale*conservativePricePenalty*phonePenalty*toolPenalty;
+ const resale=Math.max(priceBasedResale,adjustedFloor); const gross=resale-ask; const net=resale-ask-costs-timeCost; const maxBuy=resale-costs-timeCost-minMargin; const ease=easeByCategory[form.category]; const bulkyRiskPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct'); const risk = isPhone ? 'élevé' : (isDamaged || ease==='difficile' || bulkyRiskPenalty ? 'élevé' : ease==='niche' ? 'moyen' : 'faible');
  const roundedMaxBuy=Math.floor(maxBuy); const hasUsableMaxBuy=maxBuy>=5;
  let decision='ACHÈTE'; let strategy=''; let score=75;
  if(net<=0){decision='LAISSE TOMBER'; score=clamp(20+Math.max(net,-25),0,40); strategy='Marge nette négative : après frais et temps passé, ce deal ne vaut pas le coup.';}
@@ -213,6 +217,14 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  else {decision='ACHÈTE'; const surplus=net-minMargin; score=clamp(75+surplus*0.8+(risk==='faible'?4:0),75,100); strategy='Bon deal potentiel : le prix demandé est bas par rapport à la revente probable. Vérifie l’état réel, la marque, les accessoires et teste l’objet avant d’acheter.';}
  if(isDamaged){score=clamp(score-18,0,100); if(decision==='ACHÈTE') decision=net>=minMargin*1.4 ? 'NÉGOCIE' : 'LAISSE TOMBER'; strategy='Objet abîmé : prudence renforcée. Prévois une revente plus lente, plus de négociation côté acheteurs et une marge moins fiable.';}
  if(isDamagedBulky){if(ask>30){decision=net>0?'NÉGOCIE':'LAISSE TOMBER'; score=Math.min(score,45);} if(decision==='ACHÈTE') decision='NÉGOCIE'; if(ask>30 && net<=0) decision='LAISSE TOMBER'; strategy='Objet encombrant et abîmé : risque élevé de revente lente, transport compliqué et faible demande.';}
+ if(form.category==='meuble' && (form.condition==='abîmé' || form.condition==='correct')) score=Math.min(score,45);
+ if(form.category==='pièce auto') score=Math.min(score,80);
+ if(isPhone) score=Math.min(score,85);
+ if(isToolGood && !(ask<=categoryFloor*0.8)) score=Math.min(score,70);
+ if(isToolGood && ask>=50 && net<=minMargin+8 && net>0) decision='NÉGOCIE';
+ if(isPhone && askRatioToFloor>=2.6 && net>=minMargin) decision='NÉGOCIE';
+ if(isPhone){strategy='Vérifie IMEI, iCloud, batterie, facture, opérateur et état écran avant achat.';}
+ if(isToolGood){strategy='Bon objet à revendre, mais vérifie batterie, chargeur, marque, puissance et fonctionnement. Négocie si possible.';}
  if(decision==='LAISSE TOMBER' && net<0 && resale>0){score=clamp(Math.max(score,15),10,20);}
  const realisticRange=isDamagedBulky?[0.4,0.6]:isDamaged?[0.45,0.65]:ease==='bon'?[0.7,0.8]:[0.6,0.85];
  const suggestedOffer=Math.round(ask*((realisticRange[0]+realisticRange[1])/2));
