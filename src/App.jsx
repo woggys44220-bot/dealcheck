@@ -86,7 +86,7 @@ function Home({ setMode }) {
 }
 
 function SellMode({ onBack }) {
-  const [form, setForm] = useState({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
+  const [form, setForm] = useState({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0], localCount: '', localLow: '', localAvg: '', localHigh: '' });
   const [copiedMessage, setCopiedMessage] = useState('');
   const [errors, setErrors] = useState({});
   const [hasResult, setHasResult] = useState(false);
@@ -125,6 +125,19 @@ function SellMode({ onBack }) {
       nextErrors.value = 'Indique une valeur supérieure à 0 pour obtenir une estimation.';
     }
     if (!form.city.trim()) nextErrors.city = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    const localCount = Number(form.localCount);
+    const localLow = Number(form.localLow);
+    const localAvg = Number(form.localAvg);
+    const localHigh = Number(form.localHigh);
+    const hasLocalLow = form.localLow !== '';
+    const hasLocalAvg = form.localAvg !== '';
+    const hasLocalHigh = form.localHigh !== '';
+    if (form.localCount !== '' && (!Number.isFinite(localCount) || localCount < 0)) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalLow && (!Number.isFinite(localLow) || localLow < 0)) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalAvg && (!Number.isFinite(localAvg) || localAvg < 0)) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalHigh && (!Number.isFinite(localHigh) || localHigh < 0)) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalLow && hasLocalAvg && localLow > localAvg) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalAvg && hasLocalHigh && localAvg > localHigh) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -150,7 +163,7 @@ function SellMode({ onBack }) {
     setSelectedAiWarning('');
     setAiLoading(false);
     setCopiedMessage('');
-    setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
+    setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0], localCount: '', localLow: '', localAvg: '', localHigh: '' });
     setErrors({});
     setHasResult(false);
   };
@@ -357,6 +370,14 @@ function SellMode({ onBack }) {
     <FormField label="Valeur estimée / prix d’achat initial" error={errors.value} invalid={!!errors.value}><input type="number" min="0" value={form.value} onChange={(e)=>{updateSellField('value', e.target.value); if (errors.value) setErrors({...errors,value:undefined});}}/></FormField>
     <FormField label="Ville / région" error={errors.city} invalid={!!errors.city}><input value={form.city} onChange={(e)=>{updateSellField('city', e.target.value); if (errors.city) setErrors({...errors,city:undefined});}}/></FormField>
     <FormField label="Objectif"><select value={form.objective} onChange={(e)=>updateSellField('objective', e.target.value)}>{objectives.map(o=><option key={o}>{o}</option>)}</select></FormField>
+    <section>
+      <h3>Concurrence locale</h3>
+      <p className="field-hint">Optionnel : indique ce que tu vois sur les annonces similaires pour ajuster ton prix de vente.</p>
+      <FormField label="Nombre d’annonces similaires" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localCount} onChange={(e)=>{updateSellField('localCount', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix le plus bas observé" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localLow} onChange={(e)=>{updateSellField('localLow', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix moyen observé" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localAvg} onChange={(e)=>{updateSellField('localAvg', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix le plus haut observé" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localHigh} onChange={(e)=>{updateSellField('localHigh', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+    </section>
     {(errors.form || errors.name || errors.value || errors.city) && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeSell}>Analyser mon objet</button></div>
     {showResult && <SellResult data={data} />}
@@ -451,12 +472,17 @@ const FormField = ({ label, hint, children, error, invalid }) => <label classNam
 function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle = '', aiPhotoTips = [], aiSellingAdvice = '', aiWarning = '') {
   const base = Number(form.value) || 0;
   const coef = conditionCoef[form.condition];
-  const advised = base * coef;
-  const quick = advised * 0.8;
-  const high = advised * 1.25;
+  const localCount = form.localCount === '' ? null : Number(form.localCount);
+  const localLow = form.localLow === '' ? null : Number(form.localLow);
+  const localAvg = form.localAvg === '' ? null : Number(form.localAvg);
+  const localHigh = form.localHigh === '' ? null : Number(form.localHigh);
+  let advised = base * coef;
+  let quick = advised * 0.8;
+  let high = advised * 1.25;
   const ease = easeByCategory[form.category];
 
   let score = 50 + (coef * 35) + easeScore[ease];
+  let marketRecommendation = 'Concurrence non renseignée : utilise les prix proposés et ajuste selon les retours.';
 
   if (form.objective === 'vendre vite') score += 3;
   if (form.objective === 'vendre au meilleur prix') score -= 2;
@@ -466,7 +492,48 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
 
   if (form.objective === 'vendre vite' && lotCategories.has(form.category)) score -= 3;
 
+  let localCompetitionLevel = 'non renseignée';
+  if (Number.isFinite(localCount)) {
+    if (localCount <= 5) {
+      localCompetitionLevel = 'faible';
+      score += 3;
+      marketRecommendation = 'Concurrence faible : tu peux tester le prix conseillé ou légèrement plus haut.';
+    } else if (localCount <= 20) {
+      localCompetitionLevel = 'moyenne';
+      marketRecommendation = 'Concurrence moyenne : reste proche du prix moyen local.';
+    } else {
+      localCompetitionLevel = 'forte';
+      score -= 6;
+      marketRecommendation = lotCategories.has(form.category)
+        ? 'Concurrence forte : prix attractif, bonnes photos et vente en lot recommandés.'
+        : 'Concurrence forte : prix attractif, bonnes photos et titre plus précis recommandés.';
+    }
+  }
+
+  if (Number.isFinite(localAvg) && localAvg > 0) {
+    const ratioToLocalAvg = advised / localAvg;
+    if (ratioToLocalAvg >= 1.25) {
+      advised *= 0.93;
+      high *= 0.96;
+      score -= 6;
+      marketRecommendation = 'Ton prix semble au-dessus du marché local. Pour vendre plus vite, rapproche-toi du prix moyen.';
+    } else if (ratioToLocalAvg <= 0.8) {
+      high = Math.max(high, localAvg * 1.05);
+      score += 2;
+      marketRecommendation = 'Le marché local semble plus haut que ton estimation. Tu peux tester un prix un peu supérieur.';
+    } else {
+      marketRecommendation = 'Ton prix est cohérent avec le marché local.';
+    }
+  }
+
+  if (Number.isFinite(localAvg) && Number.isFinite(localLow) && localAvg <= localLow * 1.12) {
+    marketRecommendation = 'Prix local bas : attention à ne pas surestimer l’objet.';
+  } else if (Number.isFinite(localAvg) && Number.isFinite(localHigh) && localHigh >= localAvg * 1.4) {
+    marketRecommendation = 'Prix local élevé : tu peux tester un prix plus ambitieux.';
+  }
+
   score = clamp(score);
+  quick = advised * 0.8;
 
   let decision = 'PRIX CORRECT';
   if (form.objective === 'vendre vite') {
@@ -506,7 +573,28 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
   const aiDescriptionSentence = aiDescription ? ` ${cleanMarketplaceDescription(aiDescription)}` : ` Idéal pour la catégorie ${form.category}.`;
   const description = `Je vends ${form.name || 'cet objet'}, en état ${form.condition}.${aiDescriptionSentence} Disponible à ${cityLabel}.${photoSentence} Prix raisonnable. Possibilité de venir voir sur place.${addLot}`;
   const level = ease === 'bon' || ease === 'bon mais risqué' ? 'facile à vendre' : ease;
-  return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint, aiPhotoTips, aiSellingAdvice: normalizedSellingAdvice, aiWarning: (aiWarning || '').trim() };
+  const observedMarketSummary = Number.isFinite(localLow) && Number.isFinite(localAvg) && Number.isFinite(localHigh)
+    ? `Marché local observé : ${money(localLow)} à ${money(localHigh)}, moyenne ${money(localAvg)}.`
+    : '';
+  return {
+    quick,
+    advised,
+    high,
+    score,
+    ease: level,
+    strategy,
+    decision,
+    title,
+    description,
+    scoreHint,
+    aiPhotoTips,
+    aiSellingAdvice: normalizedSellingAdvice,
+    aiWarning: (aiWarning || '').trim(),
+    localCompetitionLevel,
+    localAveragePrice: localAvg,
+    observedMarketSummary,
+    marketRecommendation
+  };
 }
 
 function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const localCount=form.localCount===''?null:Number(form.localCount); const localLow=form.localLow===''?null:Number(form.localLow); const localAvg=form.localAvg===''?null:Number(form.localAvg); const localHigh=form.localHigh===''?null:Number(form.localHigh); const timeCost=hours*5; const isDamaged=form.condition==='abîmé'; const isBulky=form.category==='meuble' || form.category==='électroménager'; const isDamagedBulky=isBulky && isDamaged; const isPhone=form.category==='téléphone'; const isToolGood=form.category==='outil' && form.condition==='bon'; const baseMultiplier=categoryResaleMultiplier[form.category]||1; const conditionImpact=1+conditionCoef[form.condition]*0.3; const damagedPenalty=isDamaged?0.72:1; const bulkyPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct')?0.9:1; const basePriceResale=ask*baseMultiplier*conditionImpact*damagedPenalty*bulkyPenalty; const floorBase=(flipResaleFloorByCategory[form.category]||0)*(flipResaleFloorConditionMultiplier[form.condition]||1); const adjustedFloor=isDamagedBulky?floorBase*0.75:isDamaged?floorBase*0.85:floorBase;
@@ -576,6 +664,7 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
 function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? 'bad' : data.decision.includes('LOT') || data.decision.includes('VITE') ? 'warn' : 'good'; return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/><p className="score-note">{data.scoreHint}</p>
   <p><strong>Prix vente rapide:</strong> {money(data.quick)}</p><p><strong>Prix conseillé:</strong> {money(data.advised)}</p><p><strong>Prix haut:</strong> {money(data.high)}</p>
+  <p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p>
   <p><strong>Niveau:</strong> {data.ease}</p><p><strong>Stratégie:</strong> {data.strategy}</p><p><strong>Titre:</strong> {data.title}</p><p><strong>Description:</strong> {data.description}</p>
   {Array.isArray(data.aiPhotoTips) && data.aiPhotoTips.length > 0 && <div><strong>Conseils photo IA:</strong><ul>{data.aiPhotoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul></div>}
   {data.aiSellingAdvice && <p><strong>Conseil de mise en vente IA:</strong> {data.aiSellingAdvice}</p>}
