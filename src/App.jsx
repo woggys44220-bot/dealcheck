@@ -242,15 +242,28 @@ function SellMode({ onBack }) {
   const copyTitle = async () => copyText(data.title, 'Titre copié ✅');
   const copyDescription = async () => copyText(data.description, 'Description copiée ✅');
   const copyFullAd = async () => {
-    const title = (data.title || '').trim();
-    const description = (data.description || '').trim();
-    const advisedPrice = (data.advised || '').trim();
-    const fullAd = [
-      title ? `Titre :\n${title}` : '',
-      advisedPrice ? `Prix conseillé :\n${advisedPrice}` : '',
-      description ? `Description :\n${description}` : ''
-    ].filter(Boolean).join('\n\n');
-    await copyText(fullAd, 'Annonce copiée ✅');
+    const cleanValue = (value) => {
+      if (value === null || value === undefined) return '';
+      const normalized = String(value).trim();
+      if (!normalized) return '';
+      const lowered = normalized.toLowerCase();
+      if (lowered === 'undefined' || lowered === 'null') return '';
+      return normalized;
+    };
+    const title = cleanValue(data.title);
+    const description = cleanValue(data.description);
+    const advisedPrice = cleanValue(data.advised);
+    const sections = [];
+    if (title) sections.push(`Titre :\n${title}`);
+    if (advisedPrice) sections.push(`Prix conseillé :\n${advisedPrice} $`);
+    if (description) sections.push(`Description :\n${description}`);
+    const fullAd = sections.join('\n\n') || 'Annonce non disponible';
+    try {
+      await copyText(fullAd, 'Annonce complète copiée');
+    } catch (error) {
+      setCopiedMessage('Impossible de copier l’annonce complète');
+      setTimeout(() => setCopiedMessage(''), 2200);
+    }
   };
   const copyPhotoTips = async () => {
     const tips = Array.isArray(data.aiPhotoTips) ? data.aiPhotoTips.map((tip) => (tip || '').trim()).filter(Boolean) : [];
