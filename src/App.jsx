@@ -16,6 +16,26 @@ const lotCategories = new Set(['bijoux', 'vêtement', 'jouet', 'déco']);
 
 const money = (n) => `${(Number.isFinite(n) ? n : 0).toFixed(2)} $`;
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));
+const defaultSellingAdviceByCategory = {
+  bijoux: 'Vends ce type de bijou en lot si tu en as plusieurs, car la valeur perçue sera meilleure.',
+  vêtement: 'Ajoute des photos portées ou sur cintre, et indique la taille clairement.',
+  meuble: 'Ajoute les dimensions exactes et une photo de chaque angle.',
+  outil: 'Précise si l’objet fonctionne, s’il y a batterie, chargeur ou accessoires.',
+  téléphone: 'Indique l’état de la batterie, le stockage, l’opérateur et si le téléphone est déverrouillé.',
+  autre: 'Ajoute des photos nettes, le maximum de détails et l’état réel.'
+};
+
+function formatCity(city) {
+  const trimmedCity = (city || '').trim();
+  if (!trimmedCity) return 'votre ville';
+  return trimmedCity
+    .split(/\s+/)
+    .map((word) => word
+      .split('-')
+      .map((chunk) => chunk ? `${chunk.charAt(0).toUpperCase()}${chunk.slice(1).toLowerCase()}` : chunk)
+      .join('-'))
+    .join(' ');
+}
 
 function App() {
   const [mode, setMode] = useState('home');
@@ -223,7 +243,7 @@ function SellMode({ onBack }) {
           <p><strong>Titre vendeur :</strong> {aiSuggestion.sellingTitle || '—'}</p>
           <p><strong>Description courte :</strong> {aiSuggestion.shortDescription || '—'}</p>
           <p><strong>Description détaillée :</strong> {aiSuggestion.detailedDescription || '—'}</p>
-          <p><strong>Conseils photo :</strong> {Array.isArray(aiSuggestion.photoTips) ? aiSuggestion.photoTips.join(' | ') : '—'}</p>
+          <div><strong>Conseils photo :</strong>{Array.isArray(aiSuggestion.photoTips) && aiSuggestion.photoTips.length > 0 ? <ul>{aiSuggestion.photoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul> : <span> —</span>}</div>
           <p><strong>Conseil de mise en vente :</strong> {aiSuggestion.sellingAdvice || '—'}</p>
           <p><strong>Confiance :</strong> {aiSuggestion.confidence}</p>
           <p><strong>Avertissement :</strong> {aiSuggestion.warning}</p>
@@ -372,14 +392,16 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
       ? 'Marché moyen : il faut un bon prix et de bonnes photos.'
       : 'Risque de vente lente si le prix est trop haut.';
 
+  const cityLabel = formatCity(form.city);
+  const normalizedSellingAdvice = (aiSellingAdvice || '').trim() || defaultSellingAdviceByCategory[form.category] || defaultSellingAdviceByCategory.autre;
   const baseTitle = aiSellingTitle || form.name || 'Objet';
-  const title = `${baseTitle} - ${form.condition} - disponible à ${form.city || 'votre ville'}`;
+  const title = `${baseTitle} - ${form.condition} - disponible à ${cityLabel}`;
   const addLot = lotCategories.has(form.category) ? ' Possibilité de faire un prix pour un lot.' : '';
   const photoSentence = hasPhoto ? ' Photos disponibles dans l’annonce.' : '';
   const aiDescriptionSentence = aiDescription ? ` ${aiDescription}` : ` Idéal pour la catégorie ${form.category}.`;
-  const description = `Je vends ${form.name || 'cet objet'}, en état ${form.condition}.${aiDescriptionSentence} Disponible à ${form.city || 'votre ville'}.${photoSentence} Prix raisonnable. Possibilité de venir voir sur place.${addLot}`;
+  const description = `Je vends ${form.name || 'cet objet'}, en état ${form.condition}.${aiDescriptionSentence} Disponible à ${cityLabel}.${photoSentence} Prix raisonnable. Possibilité de venir voir sur place.${addLot}`;
   const level = ease === 'bon' || ease === 'bon mais risqué' ? 'facile à vendre' : ease;
-  return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint, aiPhotoTips, aiSellingAdvice };
+  return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint, aiPhotoTips, aiSellingAdvice: normalizedSellingAdvice };
 }
 
 function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const localCount=form.localCount===''?null:Number(form.localCount); const localLow=form.localLow===''?null:Number(form.localLow); const localAvg=form.localAvg===''?null:Number(form.localAvg); const localHigh=form.localHigh===''?null:Number(form.localHigh); const timeCost=hours*5; const isDamaged=form.condition==='abîmé'; const isBulky=form.category==='meuble' || form.category==='électroménager'; const isDamagedBulky=isBulky && isDamaged; const isPhone=form.category==='téléphone'; const isToolGood=form.category==='outil' && form.condition==='bon'; const baseMultiplier=categoryResaleMultiplier[form.category]||1; const conditionImpact=1+conditionCoef[form.condition]*0.3; const damagedPenalty=isDamaged?0.72:1; const bulkyPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct')?0.9:1; const basePriceResale=ask*baseMultiplier*conditionImpact*damagedPenalty*bulkyPenalty; const floorBase=(flipResaleFloorByCategory[form.category]||0)*(flipResaleFloorConditionMultiplier[form.condition]||1); const adjustedFloor=isDamagedBulky?floorBase*0.75:isDamaged?floorBase*0.85:floorBase;
@@ -450,7 +472,7 @@ function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? '
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/><p className="score-note">{data.scoreHint}</p>
   <p><strong>Prix vente rapide:</strong> {money(data.quick)}</p><p><strong>Prix conseillé:</strong> {money(data.advised)}</p><p><strong>Prix haut:</strong> {money(data.high)}</p>
   <p><strong>Niveau:</strong> {data.ease}</p><p><strong>Stratégie:</strong> {data.strategy}</p><p><strong>Titre:</strong> {data.title}</p><p><strong>Description:</strong> {data.description}</p>
-  {Array.isArray(data.aiPhotoTips) && data.aiPhotoTips.length > 0 && <p><strong>Conseils photo IA:</strong> {data.aiPhotoTips.join(' | ')}</p>}
+  {Array.isArray(data.aiPhotoTips) && data.aiPhotoTips.length > 0 && <div><strong>Conseils photo IA:</strong><ul>{data.aiPhotoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul></div>}
   {data.aiSellingAdvice && <p><strong>Conseil de mise en vente IA:</strong> {data.aiSellingAdvice}</p>}
 </article>; }
 
