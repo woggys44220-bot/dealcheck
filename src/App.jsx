@@ -74,6 +74,8 @@ function SellMode({ onBack }) {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [selectedAiDescription, setSelectedAiDescription] = useState('');
   const [selectedAiSellingTitle, setSelectedAiSellingTitle] = useState('');
+  const [selectedTitleType, setSelectedTitleType] = useState('selling');
+  const [selectedDescriptionType, setSelectedDescriptionType] = useState('detailed');
   const [selectedAiPhotoTips, setSelectedAiPhotoTips] = useState([]);
   const [selectedAiSellingAdvice, setSelectedAiSellingAdvice] = useState('');
   const data = useMemo(
@@ -116,6 +118,8 @@ function SellMode({ onBack }) {
     setAiSuggestion(null);
     setSelectedAiDescription('');
     setSelectedAiSellingTitle('');
+    setSelectedTitleType('selling');
+    setSelectedDescriptionType('detailed');
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
     setAiLoading(false);
@@ -141,6 +145,8 @@ function SellMode({ onBack }) {
     setAiSuggestion(null);
     setSelectedAiDescription('');
     setSelectedAiSellingTitle('');
+    setSelectedTitleType('selling');
+    setSelectedDescriptionType('detailed');
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
     setHasResult(false);
@@ -155,6 +161,8 @@ function SellMode({ onBack }) {
     setAiSuggestion(null);
     setSelectedAiDescription('');
     setSelectedAiSellingTitle('');
+    setSelectedTitleType('selling');
+    setSelectedDescriptionType('detailed');
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
     setAiLoading(false);
@@ -184,6 +192,24 @@ function SellMode({ onBack }) {
     }
   };
 
+
+
+  const getChosenTitle = (suggestion) => {
+    if (!suggestion) return '';
+    const shortTitle = (suggestion.shortTitle || '').trim();
+    const sellingTitle = (suggestion.sellingTitle || '').trim();
+    if (selectedTitleType === 'short') return shortTitle || sellingTitle;
+    return sellingTitle || shortTitle;
+  };
+
+  const getChosenDescription = (suggestion) => {
+    if (!suggestion) return '';
+    const shortDescription = (suggestion.shortDescription || '').trim();
+    const detailedDescription = (suggestion.detailedDescription || suggestion.description || '').trim();
+    if (selectedDescriptionType === 'short') return shortDescription || detailedDescription;
+    return detailedDescription || shortDescription;
+  };
+
   const useSuggestions = () => {
     if (!aiSuggestion) return;
     setForm((prev) => ({
@@ -192,8 +218,8 @@ function SellMode({ onBack }) {
       category: categories.includes(aiSuggestion.category) ? aiSuggestion.category : prev.category,
       condition: conditions.includes(aiSuggestion.condition) ? aiSuggestion.condition : prev.condition
     }));
-    setSelectedAiDescription((aiSuggestion.detailedDescription || aiSuggestion.description || '').trim());
-    setSelectedAiSellingTitle((aiSuggestion.sellingTitle || '').trim());
+    setSelectedAiDescription(getChosenDescription(aiSuggestion));
+    setSelectedAiSellingTitle(getChosenTitle(aiSuggestion));
     setSelectedAiPhotoTips(Array.isArray(aiSuggestion.photoTips) ? aiSuggestion.photoTips.map((tip) => String(tip)).filter(Boolean) : []);
     setSelectedAiSellingAdvice((aiSuggestion.sellingAdvice || '').trim());
     setHasResult(false);
@@ -243,6 +269,21 @@ function SellMode({ onBack }) {
           <p><strong>Titre vendeur :</strong> {aiSuggestion.sellingTitle || '—'}</p>
           <p><strong>Description courte :</strong> {aiSuggestion.shortDescription || '—'}</p>
           <p><strong>Description détaillée :</strong> {aiSuggestion.detailedDescription || '—'}</p>
+          <p className="field-hint">Tu peux choisir une version courte ou plus vendeuse avant de générer l’annonce.</p>
+          {(aiSuggestion.shortTitle || aiSuggestion.sellingTitle) && <div className="choice-group">
+            <p><strong>Choisir le titre à utiliser</strong></p>
+            <div className="choice-options">
+              {aiSuggestion.shortTitle && <button type="button" className={`choice-option ${selectedTitleType === 'short' ? 'selected' : ''}`} onClick={() => setSelectedTitleType('short')}>Titre court</button>}
+              {aiSuggestion.sellingTitle && <button type="button" className={`choice-option ${selectedTitleType === 'selling' ? 'selected' : ''}`} onClick={() => setSelectedTitleType('selling')}>Titre vendeur</button>}
+            </div>
+          </div>}
+          {(aiSuggestion.shortDescription || aiSuggestion.detailedDescription || aiSuggestion.description) && <div className="choice-group">
+            <p><strong>Choisir la description à utiliser</strong></p>
+            <div className="choice-options">
+              {aiSuggestion.shortDescription && <button type="button" className={`choice-option ${selectedDescriptionType === 'short' ? 'selected' : ''}`} onClick={() => setSelectedDescriptionType('short')}>Description courte</button>}
+              {(aiSuggestion.detailedDescription || aiSuggestion.description) && <button type="button" className={`choice-option ${selectedDescriptionType === 'detailed' ? 'selected' : ''}`} onClick={() => setSelectedDescriptionType('detailed')}>Description détaillée</button>}
+            </div>
+          </div>}
           <div><strong>Conseils photo :</strong>{Array.isArray(aiSuggestion.photoTips) && aiSuggestion.photoTips.length > 0 ? <ul>{aiSuggestion.photoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul> : <span> —</span>}</div>
           <p><strong>Conseil de mise en vente :</strong> {aiSuggestion.sellingAdvice || '—'}</p>
           <p><strong>Confiance :</strong> {aiSuggestion.confidence}</p>
