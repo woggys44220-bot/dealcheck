@@ -541,7 +541,7 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
         quick = Math.min(quick, localAvg * 0.85);
       }
       high = Number.isFinite(localHigh) && localHigh > 0
-        ? Math.min(Math.max(advised, localAvg), localHigh)
+        ? Math.min(Math.max(advised * 1.2, localAvg * 1.1), localHigh)
         : Math.min(Math.max(advised, localAvg * 1.05), localAvg * 1.15);
       score -= 6;
       marketRecommendation = lotCategories.has(form.category)
@@ -563,6 +563,15 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
 
   if (Number.isFinite(localHigh) && localHigh > 0 && localCompetitionLevel !== 'faible') {
     high = Math.min(high, localHigh);
+  }
+
+  if (Number.isFinite(localAvg) && localAvg > 0 && localCompetitionLevel === 'forte') {
+    if (high <= advised) {
+      high = advised * 1.2;
+      if (Number.isFinite(localHigh) && localHigh > 0) {
+        high = Math.min(high, localHigh);
+      }
+    }
   }
 
   if (Number.isFinite(localAvg) && Number.isFinite(localLow) && localAvg <= localLow * 1.12 && advised <= localAvg) {
