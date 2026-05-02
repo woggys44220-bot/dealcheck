@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const categories = ['bijoux', 'meuble', 'électroménager', 'outil', 'pièce auto', 'vêtement', 'téléphone', 'déco', 'jouet', 'sport', 'autre'];
 const conditions = ['neuf', 'très bon', 'bon', 'correct', 'abîmé'];
@@ -46,7 +46,13 @@ function SellMode({ onBack }) {
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState({});
   const [hasResult, setHasResult] = useState(false);
-  const data = useMemo(() => computeSell(form), [form]);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [photoError, setPhotoError] = useState('');
+  const data = useMemo(() => computeSell(form, Boolean(photoPreview)), [form, photoPreview]);
+
+  useEffect(() => () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+  }, [photoPreview]);
 
   const updateSellField = (field, value) => {
     setForm({ ...form, [field]: value });
@@ -70,6 +76,37 @@ function SellMode({ onBack }) {
     setHasResult(true);
   };
 
+  const resetSellForm = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview('');
+    setPhotoError('');
+    setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
+    setErrors({});
+    setHasResult(false);
+  };
+
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Merci d’ajouter une image valide.');
+      event.target.value = '';
+      return;
+    }
+    setPhotoError('');
+    const nextPreview = URL.createObjectURL(file);
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(nextPreview);
+    setHasResult(false);
+  };
+
+  const removePhoto = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview('');
+    setPhotoError('');
+    setHasResult(false);
+  };
+
   const showResult = hasResult;
   const copy = async () => {
     if (!showResult) return;
@@ -79,6 +116,28 @@ function SellMode({ onBack }) {
   };
   return <div>
     <Header title="Mode vente" onBack={onBack} />
+    <section className="photo-block">
+      <h3>Photo de l’objet</h3>
+      <p className="field-hint">Optionnel : ajoute une photo pour préparer ton annonce. La reconnaissance automatique viendra dans une prochaine version.</p>
+      <label className={photoError ? 'field-error' : ''}>
+        Importer une photo
+        <input type="file" accept="image/jpg,image/jpeg,image/png,image/webp" onChange={handlePhotoChange} />
+        {photoError && <span className="field-error-text">{photoError}</span>}
+      </label>
+      {photoPreview && (
+        <div className="photo-preview-card">
+          <img src={photoPreview} alt="Aperçu de l’objet" className="photo-preview" />
+          <button type="button" onClick={removePhoto}>Supprimer la photo</button>
+        </div>
+      )}
+      {photoPreview && <p className="photo-note">Photo ajoutée. Pour l’instant, vérifie toi-même le nom, la catégorie et l’état.</p>}
+    </section>
+
+    <section className="photo-ai-block" aria-disabled="true">
+      <h3>Analyse photo IA — bientôt</h3>
+      <p className="field-hint">Dans une prochaine version, DealCheck pourra reconnaître l’objet, suggérer la catégorie, l’état apparent et générer une description à partir de la photo.</p>
+    </section>
+
     <FormField label="Nom de l’objet" error={errors.name} invalid={!!errors.name}><input value={form.name} onChange={(e)=>{updateSellField('name', e.target.value); if (errors.name) setErrors({...errors,name:undefined});}}/></FormField>
     <FormField label="Catégorie"><select value={form.category} onChange={(e)=>updateSellField('category', e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></FormField>
     <FormField label="État"><select value={form.condition} onChange={(e)=>updateSellField('condition', e.target.value)}>{conditions.map(c=><option key={c}>{c}</option>)}</select></FormField>
@@ -88,7 +147,7 @@ function SellMode({ onBack }) {
     {(errors.form || errors.name || errors.value || errors.city) && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeSell}>Analyser mon objet</button></div>
     {showResult && <SellResult data={data} />}
-    {showResult && <div className="actions"><button className="primary" onClick={copy}>Copier l’annonce</button><button onClick={()=>{setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] }); setErrors({}); setHasResult(false);}}>Recommencer</button></div>}
+    {showResult && <div className="actions"><button className="primary" onClick={copy}>Copier l’annonce</button><button onClick={resetSellForm}>Recommencer</button></div>}
     {copied && <p className="copied">Annonce copiée ✅</p>}
   </div>;
 }
@@ -170,7 +229,7 @@ function FlipMode({ onBack }) {
 const Header = ({ title, onBack }) => <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>{title}</h2></div>;
 const FormField = ({ label, hint, children, error, invalid }) => <label className={invalid ? 'field-error' : ''}>{label}{hint && <span className="field-hint">{hint}</span>}{children}{error && <span className="field-error-text">{error}</span>}</label>;
 
-function computeSell(form) {
+function computeSell(form, hasPhoto = false) {
   const base = Number(form.value) || 0;
   const coef = conditionCoef[form.condition];
   const advised = base * coef;
@@ -221,7 +280,8 @@ function computeSell(form) {
 
   const title = `${form.name || 'Objet'} - ${form.condition} - disponible à ${form.city || 'votre ville'}`;
   const addLot = lotCategories.has(form.category) ? ' Possibilité de faire un prix pour un lot.' : '';
-  const description = `Je vends ${form.name || 'cet objet'}, en état ${form.condition}. Idéal pour la catégorie ${form.category}. Disponible à ${form.city || 'votre ville'}. Prix raisonnable. Possibilité de venir voir sur place.${addLot}`;
+  const photoSentence = hasPhoto ? ' Photos disponibles dans l’annonce.' : '';
+  const description = `Je vends ${form.name || 'cet objet'}, en état ${form.condition}. Idéal pour la catégorie ${form.category}. Disponible à ${form.city || 'votre ville'}.${photoSentence} Prix raisonnable. Possibilité de venir voir sur place.${addLot}`;
   const level = ease === 'bon' || ease === 'bon mais risqué' ? 'facile à vendre' : ease;
   return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint };
 }
