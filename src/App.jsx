@@ -132,8 +132,8 @@ function FlipMode({ onBack }) {
     <FormField label="Catégorie"><select value={form.category} onChange={(e)=>updateFlipField('category', e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></FormField>
     <FormField label="État"><select value={form.condition} onChange={(e)=>updateFlipField('condition', e.target.value)}>{conditions.map(c=><option key={c}>{c}</option>)}</select></FormField>
     <FormField label="Prix demandé" error={errors.ask} invalid={!!errors.ask}><input type="number" min="0" value={form.ask} onChange={(e)=>{updateFlipField('ask', e.target.value); if (errors.ask) setErrors({...errors,ask:undefined});}}/></FormField>
-    <FormField label="Frais estimés" error={errors.costs} invalid={!!errors.costs}><input type="number" min="0" value={form.costs} onChange={(e)=>{updateFlipField('costs', e.target.value); if (errors.costs) setErrors({...errors,costs:undefined});}}/></FormField>
-    <FormField label="Temps estimé (heures)" error={errors.hours} invalid={!!errors.hours}><input type="number" min="0" value={form.hours} onChange={(e)=>{updateFlipField('hours', e.target.value); if (errors.hours) setErrors({...errors,hours:undefined});}}/></FormField>
+    <FormField label="Frais estimés" hint="Essence, livraison, nettoyage, petite réparation ou autres frais liés à l’objet." error={errors.costs} invalid={!!errors.costs}><input type="number" min="0" value={form.costs} onChange={(e)=>{updateFlipField('costs', e.target.value); if (errors.costs) setErrors({...errors,costs:undefined});}}/></FormField>
+    <FormField label="Temps estimé (heures)" hint="Temps pour aller chercher, nettoyer, publier l’annonce et vendre l’objet." error={errors.hours} invalid={!!errors.hours}><input type="number" min="0" value={form.hours} onChange={(e)=>{updateFlipField('hours', e.target.value); if (errors.hours) setErrors({...errors,hours:undefined});}}/></FormField>
     <FormField label="Ville / région" error={errors.city} invalid={!!errors.city}><input value={form.city} onChange={(e)=>{updateFlipField('city', e.target.value); if (errors.city) setErrors({...errors,city:undefined});}}/></FormField>
     <FormField label="Marge minimum souhaitée" error={errors.minMargin} invalid={!!errors.minMargin}><input type="number" min="0" value={form.minMargin} onChange={(e)=>{updateFlipField('minMargin', e.target.value); if (errors.minMargin) setErrors({...errors,minMargin:undefined});}}/></FormField>
     {Object.keys(errors).length > 0 && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
@@ -145,7 +145,7 @@ function FlipMode({ onBack }) {
 }
 
 const Header = ({ title, onBack }) => <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>{title}</h2></div>;
-const FormField = ({ label, children, error, invalid }) => <label className={invalid ? 'field-error' : ''}>{label}{children}{error && <span className="field-error-text">{error}</span>}</label>;
+const FormField = ({ label, hint, children, error, invalid }) => <label className={invalid ? 'field-error' : ''}>{label}{hint && <span className="field-hint">{hint}</span>}{children}{error && <span className="field-error-text">{error}</span>}</label>;
 
 function computeSell(form) {
   const base = Number(form.value) || 0;
@@ -203,11 +203,11 @@ function computeSell(form) {
   return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint };
 }
 
-function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const timeCost=hours*10; const resale=ask*categoryResaleMultiplier[form.category]*(1+conditionCoef[form.condition]*0.3); const gross=resale-ask; const net=resale-ask-costs-timeCost; const maxBuy=resale-costs-timeCost-minMargin; const ease=easeByCategory[form.category]; const risk = form.condition==='abîmé' || ease==='difficile' || form.category==='téléphone' ? 'élevé' : ease==='niche' ? 'moyen' : 'faible';
+function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const timeCost=hours*5; const resale=ask*categoryResaleMultiplier[form.category]*(1+conditionCoef[form.condition]*0.3); const gross=resale-ask; const net=resale-ask-costs-timeCost; const maxBuy=resale-costs-timeCost-minMargin; const ease=easeByCategory[form.category]; const risk = form.condition==='abîmé' || ease==='difficile' || form.category==='téléphone' ? 'élevé' : ease==='niche' ? 'moyen' : 'faible';
  const roundedMaxBuy=Math.floor(maxBuy); const hasUsableMaxBuy=maxBuy>=5;
  let decision='ACHÈTE'; let strategy=''; let score=75;
  if(net<=0){decision='LAISSE TOMBER'; score=clamp(20+Math.max(net,-25),0,40); strategy='Marge nette négative : après frais et temps passé, ce deal ne vaut pas le coup.';}
- else if(net<minMargin){decision='NÉGOCIE'; const progress=minMargin>0?net/minMargin:0.5; score=clamp(45+progress*25,45,70); strategy='Marge possible, mais pas assez forte au prix actuel. Négocie plus bas.';}
+ else if(net<minMargin){decision='NÉGOCIE'; const progress=minMargin>0?net/minMargin:0.5; score=clamp(45+progress*25,45,70); strategy='Marge possible, mais elle devient faible après frais et temps passé. Négocie plus bas.';}
  else {decision='ACHÈTE'; const surplus=net-minMargin; score=clamp(75+surplus*0.8+(risk==='faible'?4:0),75,100); strategy='Marge nette suffisante : bon deal si l’état réel est confirmé.';}
  const displayMaxBuy=hasUsableMaxBuy?`${roundedMaxBuy} $`:'Non rentable';
  const negotiationMessage = !hasUsableMaxBuy && decision==='LAISSE TOMBER'
@@ -218,7 +218,7 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  const maxBuyAdvice=!hasUsableMaxBuy
   ? 'Ce deal n’est pas rentable au prix actuel. Ne négocie que si le vendeur accepte un prix très bas.'
   : '';
- return {ask,costs,timeCost,resale,gross,net,maxBuy,displayMaxBuy,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease};}
+ return {ask,costs,hours,timeCost,resale,gross,net,maxBuy,displayMaxBuy,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease};}
 
 function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? 'bad' : data.decision.includes('LOT') || data.decision.includes('VITE') ? 'warn' : 'good'; return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score}/><p className="score-note">{data.scoreHint}</p>
@@ -228,7 +228,7 @@ function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? '
 
 function FlipResult({ data }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score}/>
-  <p><strong>Prix max conseillé:</strong> {data.displayMaxBuy}</p><p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p>
+  <p><strong>Prix max conseillé:</strong> {data.displayMaxBuy}</p><p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p>
   <p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message:</strong> {data.negotiationMessage}</p>
 </article>; }
 

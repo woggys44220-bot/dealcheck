@@ -3,3 +3,5 @@
 .form-error{color:#b91c1c;font-weight:700;margin:10px 0}
 .field-error input,.field-error select{border-color:#ef4444;background:#fef2f2}
 .field-error-text{color:#b91c1c;font-size:.9rem;font-weight:600}
+
+.field-hint{font-weight:500;color:#64748b;font-size:.9rem;line-height:1.35}
