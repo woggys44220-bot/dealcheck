@@ -42,18 +42,39 @@ function Home({ setMode }) {
 function SellMode({ onBack }) {
   const [form, setForm] = useState({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
   const [copied, setCopied] = useState(false);
+  const [errors, setErrors] = useState({});
   const data = useMemo(() => computeSell(form), [form]);
-  const copy = async () => { await navigator.clipboard.writeText(`${data.title}\n\n${data.description}`); setCopied(true); setTimeout(() => setCopied(false), 1400); };
+
+  const validateSellForm = () => {
+    const nextErrors = {};
+    if (!form.name.trim()) nextErrors.name = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    const value = Number(form.value);
+    if (!form.value || !Number.isFinite(value) || value <= 0) {
+      nextErrors.value = 'Indique une valeur supérieure à 0 pour obtenir une estimation.';
+    }
+    if (!form.city.trim()) nextErrors.city = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const showResult = Object.keys(errors).length === 0 && form.name.trim() && form.city.trim() && Number(form.value) > 0;
+  const copy = async () => {
+    if (!validateSellForm()) return;
+    await navigator.clipboard.writeText(`${data.title}\n\n${data.description}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1400);
+  };
   return <div>
     <Header title="Mode vente" onBack={onBack} />
-    <FormField label="Nom de l’objet"><input value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></FormField>
+    <FormField label="Nom de l’objet" error={errors.name} invalid={!!errors.name}><input value={form.name} onChange={(e)=>{setForm({...form,name:e.target.value}); if (errors.name) setErrors({...errors,name:undefined});}}/></FormField>
     <FormField label="Catégorie"><select value={form.category} onChange={(e)=>setForm({...form,category:e.target.value})}>{categories.map(c=><option key={c}>{c}</option>)}</select></FormField>
     <FormField label="État"><select value={form.condition} onChange={(e)=>setForm({...form,condition:e.target.value})}>{conditions.map(c=><option key={c}>{c}</option>)}</select></FormField>
-    <FormField label="Valeur estimée / prix d’achat initial"><input type="number" min="0" value={form.value} onChange={(e)=>setForm({...form,value:e.target.value})}/></FormField>
-    <FormField label="Ville / région"><input value={form.city} onChange={(e)=>setForm({...form,city:e.target.value})}/></FormField>
+    <FormField label="Valeur estimée / prix d’achat initial" error={errors.value} invalid={!!errors.value}><input type="number" min="0" value={form.value} onChange={(e)=>{setForm({...form,value:e.target.value}); if (errors.value) setErrors({...errors,value:undefined});}}/></FormField>
+    <FormField label="Ville / région" error={errors.city} invalid={!!errors.city}><input value={form.city} onChange={(e)=>{setForm({...form,city:e.target.value}); if (errors.city) setErrors({...errors,city:undefined});}}/></FormField>
     <FormField label="Objectif"><select value={form.objective} onChange={(e)=>setForm({...form,objective:e.target.value})}>{objectives.map(o=><option key={o}>{o}</option>)}</select></FormField>
-    <SellResult data={data} />
-    <div className="actions"><button className="primary" onClick={copy}>Copier l’annonce</button><button onClick={()=>setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] })}>Recommencer</button></div>
+    {(errors.form || errors.name || errors.value || errors.city) && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
+    {showResult && <SellResult data={data} />}
+    <div className="actions"><button className="primary" onClick={copy}>Copier l’annonce</button><button onClick={()=>{setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] }); setErrors({});}}>Recommencer</button></div>
     {copied && <p className="copied">Annonce copiée ✅</p>}
   </div>;
 }
@@ -61,26 +82,46 @@ function SellMode({ onBack }) {
 function FlipMode({ onBack }) {
   const [form, setForm] = useState({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'' });
   const [copied, setCopied] = useState(false);
+  const [errors, setErrors] = useState({});
   const data = useMemo(()=>computeFlip(form), [form]);
-  const copy = async ()=>{ await navigator.clipboard.writeText(data.negotiationMessage); setCopied(true); setTimeout(()=>setCopied(false), 1400); };
+
+  const validateFlipForm = () => {
+    const nextErrors = {};
+    if (!form.name.trim()) nextErrors.name = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    const ask = Number(form.ask);
+    if (!form.ask || !Number.isFinite(ask) || ask <= 0) nextErrors.ask = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    if (!form.city.trim()) nextErrors.city = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    const minMargin = Number(form.minMargin);
+    if (form.minMargin === '' || !Number.isFinite(minMargin) || minMargin < 0) nextErrors.minMargin = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    const costs = Number(form.costs);
+    if (form.costs !== '' && (!Number.isFinite(costs) || costs < 0)) nextErrors.costs = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    const hours = Number(form.hours);
+    if (form.hours !== '' && (!Number.isFinite(hours) || hours < 0)) nextErrors.hours = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const showResult = Object.keys(errors).length === 0 && form.name.trim() && form.city.trim() && Number(form.ask) > 0 && form.minMargin !== '' && Number(form.minMargin) >= 0;
+  const copy = async ()=>{ if (!validateFlipForm()) return; await navigator.clipboard.writeText(data.negotiationMessage); setCopied(true); setTimeout(()=>setCopied(false), 1400); };
   return <div>
     <Header title="Mode achat-revente" onBack={onBack} />
-    <FormField label="Nom de l’objet"><input value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></FormField>
+    <FormField label="Nom de l’objet" error={errors.name} invalid={!!errors.name}><input value={form.name} onChange={(e)=>{setForm({...form,name:e.target.value}); if (errors.name) setErrors({...errors,name:undefined});}}/></FormField>
     <FormField label="Catégorie"><select value={form.category} onChange={(e)=>setForm({...form,category:e.target.value})}>{categories.map(c=><option key={c}>{c}</option>)}</select></FormField>
     <FormField label="État"><select value={form.condition} onChange={(e)=>setForm({...form,condition:e.target.value})}>{conditions.map(c=><option key={c}>{c}</option>)}</select></FormField>
-    <FormField label="Prix demandé"><input type="number" min="0" value={form.ask} onChange={(e)=>setForm({...form,ask:e.target.value})}/></FormField>
-    <FormField label="Frais estimés"><input type="number" min="0" value={form.costs} onChange={(e)=>setForm({...form,costs:e.target.value})}/></FormField>
-    <FormField label="Temps estimé (heures)"><input type="number" min="0" value={form.hours} onChange={(e)=>setForm({...form,hours:e.target.value})}/></FormField>
-    <FormField label="Ville / région"><input value={form.city} onChange={(e)=>setForm({...form,city:e.target.value})}/></FormField>
-    <FormField label="Marge minimum souhaitée"><input type="number" min="0" value={form.minMargin} onChange={(e)=>setForm({...form,minMargin:e.target.value})}/></FormField>
-    <FlipResult data={data} />
-    <div className="actions"><button className="primary" onClick={copy}>Copier le message</button><button onClick={()=>setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'' })}>Recommencer</button></div>
+    <FormField label="Prix demandé" error={errors.ask} invalid={!!errors.ask}><input type="number" min="0" value={form.ask} onChange={(e)=>{setForm({...form,ask:e.target.value}); if (errors.ask) setErrors({...errors,ask:undefined});}}/></FormField>
+    <FormField label="Frais estimés" error={errors.costs} invalid={!!errors.costs}><input type="number" min="0" value={form.costs} onChange={(e)=>{setForm({...form,costs:e.target.value}); if (errors.costs) setErrors({...errors,costs:undefined});}}/></FormField>
+    <FormField label="Temps estimé (heures)" error={errors.hours} invalid={!!errors.hours}><input type="number" min="0" value={form.hours} onChange={(e)=>{setForm({...form,hours:e.target.value}); if (errors.hours) setErrors({...errors,hours:undefined});}}/></FormField>
+    <FormField label="Ville / région" error={errors.city} invalid={!!errors.city}><input value={form.city} onChange={(e)=>{setForm({...form,city:e.target.value}); if (errors.city) setErrors({...errors,city:undefined});}}/></FormField>
+    <FormField label="Marge minimum souhaitée" error={errors.minMargin} invalid={!!errors.minMargin}><input type="number" min="0" value={form.minMargin} onChange={(e)=>{setForm({...form,minMargin:e.target.value}); if (errors.minMargin) setErrors({...errors,minMargin:undefined});}}/></FormField>
+    {Object.keys(errors).length > 0 && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
+    {showResult && <FlipResult data={data} />}
+    <div className="actions"><button className="primary" onClick={copy}>Copier le message</button><button onClick={()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'' }); setErrors({});}}>Recommencer</button></div>
     {copied && <p className="copied">Message copié ✅</p>}
   </div>;
 }
 
 const Header = ({ title, onBack }) => <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>{title}</h2></div>;
-const FormField = ({ label, children }) => <label>{label}{children}</label>;
+const FormField = ({ label, children, error, invalid }) => <label className={invalid ? 'field-error' : ''}>{label}{children}{error && <span className="field-error-text">{error}</span>}</label>;
 
 function computeSell(form) {
   const base = Number(form.value) || 0;
