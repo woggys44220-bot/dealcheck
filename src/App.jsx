@@ -530,13 +530,28 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
 
   if (Number.isFinite(localAvg) && localAvg > 0) {
     const ratioToLocalAvg = advised / localAvg;
-    if (ratioToLocalAvg >= 1.25) {
+    if (localCompetitionLevel === 'forte') {
+      if (form.objective === 'vendre vite') {
+        advised = Math.min(advised, localAvg * 1.02);
+        quick = Number.isFinite(localLow) && localLow > 0
+          ? Math.max(localLow, localAvg * 0.8)
+          : localAvg * 0.8;
+      } else {
+        advised = Math.min(advised, localAvg * 1.08);
+        quick = Math.min(quick, localAvg * 0.85);
+      }
+      high = Number.isFinite(localHigh) && localHigh > 0
+        ? Math.min(Math.max(advised, localAvg), localHigh)
+        : Math.min(Math.max(advised, localAvg * 1.05), localAvg * 1.15);
+      score -= 6;
+      marketRecommendation = lotCategories.has(form.category)
+        ? 'Concurrence forte : garde un prix proche du marché. Avec forte concurrence, vise un prix proche du marché ou propose un lot pour augmenter la valeur perçue.'
+        : 'Concurrence forte : garde un prix proche du marché pour vendre plus vite.';
+    } else if (ratioToLocalAvg >= 1.25) {
       advised *= 0.93;
       high *= 0.96;
       score -= 6;
-      marketRecommendation = localCompetitionLevel === 'forte'
-        ? 'Concurrence forte et prix moyen local bas : privilégie un prix attractif, de bonnes photos et la vente en lot.'
-        : 'Prix moyen local plus bas que ton estimation : pour vendre plus vite, rapproche-toi du marché ou vends en lot.';
+      marketRecommendation = 'Prix moyen local plus bas que ton estimation : pour vendre plus vite, rapproche-toi du marché ou vends en lot.';
     } else if (ratioToLocalAvg <= 0.8) {
       high = Math.max(high, localAvg * 1.05);
       score += 2;
@@ -546,18 +561,18 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
     }
   }
 
+  if (Number.isFinite(localHigh) && localHigh > 0 && localCompetitionLevel !== 'faible') {
+    high = Math.min(high, localHigh);
+  }
+
   if (Number.isFinite(localAvg) && Number.isFinite(localLow) && localAvg <= localLow * 1.12 && advised <= localAvg) {
     marketRecommendation = 'Prix local bas : attention à ne pas surestimer l’objet.';
-  } else if (Number.isFinite(localAvg) && Number.isFinite(localHigh) && localHigh >= localAvg * 1.4) {
-    marketRecommendation = advised > localAvg
-      ? (localCompetitionLevel === 'forte'
-        ? 'Concurrence forte et prix moyen local bas : privilégie un prix attractif, de bonnes photos et la vente en lot.'
-        : 'Prix moyen local plus bas que ton estimation : pour vendre plus vite, rapproche-toi du marché ou vends en lot.')
-      : 'Le marché local semble plus haut que ton estimation : tu peux tester un prix légèrement plus ambitieux.';
   }
 
   score = clamp(score);
-  quick = advised * 0.8;
+  if (!(Number.isFinite(localAvg) && localAvg > 0 && localCompetitionLevel === 'forte')) {
+    quick = advised * 0.8;
+  }
 
   let decision = 'PRIX CORRECT';
   if (form.objective === 'vendre vite') {
