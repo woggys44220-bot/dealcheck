@@ -212,7 +212,8 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  else if(net<minMargin){decision='NÉGOCIE'; const progress=minMargin>0?net/minMargin:0.5; score=clamp(45+progress*25,45,70); strategy='Marge possible, mais elle devient faible après frais et temps passé. Négocie plus bas.';}
  else {decision='ACHÈTE'; const surplus=net-minMargin; score=clamp(75+surplus*0.8+(risk==='faible'?4:0),75,100); strategy='Bon deal potentiel : le prix demandé est bas par rapport à la revente probable. Vérifie l’état réel, la marque, les accessoires et teste l’objet avant d’acheter.';}
  if(isDamaged){score=clamp(score-18,0,100); if(decision==='ACHÈTE') decision=net>=minMargin*1.4 ? 'NÉGOCIE' : 'LAISSE TOMBER'; strategy='Objet abîmé : prudence renforcée. Prévois une revente plus lente, plus de négociation côté acheteurs et une marge moins fiable.';}
- if(isDamagedBulky){if(ask>30){decision=net>0?'NÉGOCIE':'LAISSE TOMBER'; score=Math.min(score,45);} if(decision==='ACHÈTE') decision='NÉGOCIE'; if(ask>30 && net<=0) decision='LAISSE TOMBER'; strategy='Objet encombrant et état faible : attention au transport, au temps de revente et aux acheteurs difficiles. Négocie très bas ou évite.';}
+ if(isDamagedBulky){if(ask>30){decision=net>0?'NÉGOCIE':'LAISSE TOMBER'; score=Math.min(score,45);} if(decision==='ACHÈTE') decision='NÉGOCIE'; if(ask>30 && net<=0) decision='LAISSE TOMBER'; strategy='Objet encombrant et abîmé : risque élevé de revente lente, transport compliqué et faible demande.';}
+ if(decision==='LAISSE TOMBER' && net<0 && resale>0){score=clamp(Math.max(score,15),10,20);}
  const realisticRange=isDamagedBulky?[0.4,0.6]:isDamaged?[0.45,0.65]:ease==='bon'?[0.7,0.8]:[0.6,0.85];
  const suggestedOffer=Math.round(ask*((realisticRange[0]+realisticRange[1])/2));
  const displayMaxBuy=hasUsableMaxBuy?`${roundedMaxBuy} $`:'Non rentable';
@@ -237,7 +238,9 @@ function FlipResult({ data }) {const tone = data.decision==='ACHÈTE' ? 'good' :
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/>
   {data.decision==='ACHÈTE'
     ? <><p><strong>Prix demandé:</strong> {money(data.ask)}</p><p><strong>Prix demandé correct</strong></p></>
-    : <><p><strong>Prix max théorique:</strong> {data.displayMaxBuy}</p><p><strong>Prix de négociation conseillé:</strong> {data.displayOffer}</p></>}
+    : data.decision==='LAISSE TOMBER'
+      ? <p><strong>Prix de négociation conseillé:</strong> Non rentable</p>
+      : <><p><strong>Prix max théorique:</strong> {data.displayMaxBuy}</p><p><strong>Prix de négociation conseillé:</strong> {data.displayOffer}</p></>}
   <p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p>
   <p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message:</strong> {data.negotiationMessage}</p>
 </article>; }
