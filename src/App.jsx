@@ -218,7 +218,7 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  const negotiationMessage = decision==='LAISSE TOMBER'
   ? 'Non rentable'
   : decision==='ACHÈTE'
-    ? 'Le prix demandé semble déjà intéressant. Tu peux acheter si l’état est confirmé.'
+    ? `Bonjour, votre ${form.name || 'objet'} m’intéresse. Est-ce qu’il est toujours disponible ? Si l’état est bien conforme à l’annonce, je peux venir le chercher rapidement.`
     : `Bonjour, votre annonce m’intéresse. Est-ce que vous accepteriez ${suggestedOffer} $ si je viens le chercher rapidement ?`;
  const maxBuyAdvice=!hasUsableMaxBuy
   ? 'Ce deal n’est pas rentable au prix actuel. Ne négocie que si le vendeur accepte un prix très bas.'
@@ -233,7 +233,10 @@ function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? '
 
 function FlipResult({ data }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/>
-  <p><strong>Prix max théorique:</strong> {data.displayMaxBuy}</p><p><strong>Prix de négociation conseillé:</strong> {data.displayOffer}</p><p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p>
+  {data.decision==='ACHÈTE'
+    ? <><p><strong>Prix demandé:</strong> {money(data.ask)}</p><p><strong>Prix demandé correct</strong></p></>
+    : <><p><strong>Prix max théorique:</strong> {data.displayMaxBuy}</p><p><strong>Prix de négociation conseillé:</strong> {data.displayOffer}</p></>}
+  <p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p>
   <p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message:</strong> {data.negotiationMessage}</p>
 </article>; }
 
