@@ -130,11 +130,15 @@ function SellMode({ onBack }) {
     try {
       const body = new FormData();
       body.append('photo', photoFile);
+      console.log('Analyse photo: appel backend démarré');
       const response = await fetch('/api/analyze-photo', { method: 'POST', body });
-      if (!response.ok) throw new Error('api');
+      console.log('Analyse photo: status HTTP', response.status);
       const result = await response.json();
+      console.log('Analyse photo: réponse JSON', result);
+      if (!response.ok) throw new Error(`api_${response.status}`);
       setAiSuggestion(result);
-    } catch {
+    } catch (error) {
+      console.error('Analyse photo: erreur fetch complète', error);
       setAiError('Impossible d’analyser la photo pour le moment. Tu peux continuer manuellement.');
     } finally {
       setAiLoading(false);

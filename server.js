@@ -15,8 +15,19 @@ const allowedConfidence = ['faible', 'moyenne', 'élevée'];
 app.use(cors());
 
 app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
+  console.log('Requête analyse photo reçue');
+  const hasFile = Boolean(req.file);
+  const mimeType = req.file?.mimetype || 'absent';
+  const fileSize = req.file?.size || 0;
+  const hasApiKey = Boolean(process.env.OPENAI_API_KEY);
+  const model = 'gpt-4.1-mini';
+  console.log('Analyse photo: fichier reçu =', hasFile);
+  console.log('Analyse photo: type MIME =', mimeType);
+  console.log('Analyse photo: taille fichier (octets) =', fileSize);
+  console.log(`Analyse photo: OPENAI_API_KEY ${hasApiKey ? 'présente' : 'absente'}`);
+  console.log('Analyse photo: modèle utilisé =', model);
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!hasApiKey) {
       return res.status(503).json({ error: 'OPENAI_API_KEY manquante.' });
     }
 
@@ -29,7 +40,7 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
     const dataUrl = `data:${req.file.mimetype};base64,${imageBase64}`;
 
     const response = await client.responses.create({
-      model: 'gpt-4.1-mini',
+      model,
       input: [
         {
           role: 'user',
@@ -63,6 +74,7 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
 
     res.json(safe);
   } catch (error) {
+    console.error('Analyse photo: erreur OpenAI complète', error);
     res.status(500).json({ error: 'Analyse indisponible.' });
   }
 });
