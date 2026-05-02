@@ -47,7 +47,11 @@ function SellMode({ onBack }) {
   const [errors, setErrors] = useState({});
   const [hasResult, setHasResult] = useState(false);
   const [photoPreview, setPhotoPreview] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
   const [photoError, setPhotoError] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiSuggestion, setAiSuggestion] = useState(null);
   const data = useMemo(() => computeSell(form, Boolean(photoPreview)), [form, photoPreview]);
 
   useEffect(() => () => {
@@ -79,7 +83,11 @@ function SellMode({ onBack }) {
   const resetSellForm = () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview('');
+    setPhotoFile(null);
     setPhotoError('');
+    setAiError('');
+    setAiSuggestion(null);
+    setAiLoading(false);
     setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
     setErrors({});
     setHasResult(false);
@@ -97,13 +105,50 @@ function SellMode({ onBack }) {
     const nextPreview = URL.createObjectURL(file);
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(nextPreview);
+    setPhotoFile(file);
+    setAiError('');
+    setAiSuggestion(null);
     setHasResult(false);
   };
 
   const removePhoto = () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview('');
+    setPhotoFile(null);
     setPhotoError('');
+    setAiError('');
+    setAiSuggestion(null);
+    setAiLoading(false);
+    setHasResult(false);
+  };
+
+  const analyzePhoto = async () => {
+    if (!photoFile) return;
+    setAiLoading(true);
+    setAiError('');
+    setAiSuggestion(null);
+    try {
+      const body = new FormData();
+      body.append('photo', photoFile);
+      const response = await fetch('/api/analyze-photo', { method: 'POST', body });
+      if (!response.ok) throw new Error('api');
+      const result = await response.json();
+      setAiSuggestion(result);
+    } catch {
+      setAiError('Impossible d’analyser la photo pour le moment. Tu peux continuer manuellement.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const useSuggestions = () => {
+    if (!aiSuggestion) return;
+    setForm((prev) => ({
+      ...prev,
+      name: aiSuggestion.objectName || prev.name,
+      category: categories.includes(aiSuggestion.category) ? aiSuggestion.category : prev.category,
+      condition: conditions.includes(aiSuggestion.condition) ? aiSuggestion.condition : prev.condition
+    }));
     setHasResult(false);
   };
 
@@ -133,9 +178,25 @@ function SellMode({ onBack }) {
       {photoPreview && <p className="photo-note">Photo ajoutée. Pour l’instant, vérifie toi-même le nom, la catégorie et l’état.</p>}
     </section>
 
-    <section className="photo-ai-block" aria-disabled="true">
-      <h3>Analyse photo IA — bientôt</h3>
-      <p className="field-hint">Dans une prochaine version, DealCheck pourra reconnaître l’objet, suggérer la catégorie, l’état apparent et générer une description à partir de la photo.</p>
+    <section className="photo-ai-block">
+      <h3>Analyse photo IA</h3>
+      <p className="field-hint">Optionnel : l’IA propose un nom, une catégorie, un état apparent et une description. Vérifie toujours manuellement avant publication.</p>
+      {photoFile && !aiLoading && <button type="button" onClick={analyzePhoto}>Analyser la photo</button>}
+      {aiLoading && <p className="photo-note">Analyse en cours…</p>}
+      {aiError && <p className="form-error">{aiError}</p>}
+      {aiSuggestion && (
+        <article className="ai-suggestion">
+          <h4>Suggestion IA</h4>
+          <p><strong>Objet détecté :</strong> {aiSuggestion.objectName}</p>
+          <p><strong>Catégorie proposée :</strong> {aiSuggestion.category}</p>
+          <p><strong>État apparent :</strong> {aiSuggestion.condition}</p>
+          <p><strong>Mots-clés :</strong> {Array.isArray(aiSuggestion.keywords) ? aiSuggestion.keywords.join(', ') : ''}</p>
+          <p><strong>Description proposée :</strong> {aiSuggestion.description}</p>
+          <p><strong>Confiance :</strong> {aiSuggestion.confidence}</p>
+          <p><strong>Avertissement :</strong> {aiSuggestion.warning}</p>
+          <button type="button" onClick={useSuggestions}>Utiliser ces suggestions</button>
+        </article>
+      )}
     </section>
 
     <FormField label="Nom de l’objet" error={errors.name} invalid={!!errors.name}><input value={form.name} onChange={(e)=>{updateSellField('name', e.target.value); if (errors.name) setErrors({...errors,name:undefined});}}/></FormField>
