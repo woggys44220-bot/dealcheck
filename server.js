@@ -14,6 +14,23 @@ const allowedConfidence = ['faible', 'moyenne', 'élevée'];
 
 app.use(cors());
 
+function extractJsonFromAiText(rawText) {
+  const text = String(rawText || '');
+  let cleaned = text
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+
+  return cleaned.trim();
+}
+
 app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
   console.log('Requête analyse photo reçue');
   const hasFile = Boolean(req.file);
@@ -57,14 +74,8 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
 
     const raw = response.output_text || '{}';
     console.log('Analyse photo: réponse IA brute reçue');
-    const firstBrace = raw.indexOf('{');
-    const lastBrace = raw.lastIndexOf('}');
-    const cleanedJson = raw
-      .replace(/```json/gi, '')
-      .replace(/```/g, '')
-      .slice(firstBrace >= 0 ? firstBrace : 0, lastBrace >= 0 ? lastBrace + 1 : raw.length)
-      .trim();
-    console.log('Analyse photo: JSON nettoyé avant parsing');
+    const cleanedJson = extractJsonFromAiText(raw);
+    console.log('Analyse photo: JSON nettoyé avant parsing', cleanedJson);
 
     let parsed;
     try {
