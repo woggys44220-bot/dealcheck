@@ -209,16 +209,19 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  if(net<=0){decision='LAISSE TOMBER'; score=clamp(20+Math.max(net,-25),0,40); strategy='Marge nette négative : après frais et temps passé, ce deal ne vaut pas le coup.';}
  else if(net<minMargin){decision='NÉGOCIE'; const progress=minMargin>0?net/minMargin:0.5; score=clamp(45+progress*25,45,70); strategy='Marge possible, mais elle devient faible après frais et temps passé. Négocie plus bas.';}
  else {decision='ACHÈTE'; const surplus=net-minMargin; score=clamp(75+surplus*0.8+(risk==='faible'?4:0),75,100); strategy='Marge nette suffisante : bon deal si l’état réel est confirmé.';}
+ const realisticRange=ease==='bon'?[0.7,0.8]:[0.6,0.85];
+ const suggestedOffer=Math.round(ask*((realisticRange[0]+realisticRange[1])/2));
  const displayMaxBuy=hasUsableMaxBuy?`${roundedMaxBuy} $`:'Non rentable';
- const negotiationMessage = !hasUsableMaxBuy && decision==='LAISSE TOMBER'
-  ? 'Bonjour, votre annonce m’intéresse, mais le prix est trop élevé pour mon budget. Seriez-vous ouvert à une forte négociation ?'
-  : decision==='ACHÈTE' && ask<=roundedMaxBuy
+ const displayOffer=decision==='NÉGOCIE'?`${suggestedOffer} $`:decision==='ACHÈTE'?'Prix demandé correct':'Non rentable';
+ const negotiationMessage = decision==='LAISSE TOMBER'
+  ? 'Non rentable'
+  : decision==='ACHÈTE'
     ? `Bonjour, votre annonce m’intéresse. Je peux l’acheter à votre prix demandé de ${money(ask)} si l’état est bien conforme.`
-    : `Bonjour, votre annonce m’intéresse. Est-ce que vous accepteriez ${roundedMaxBuy} $ si je viens le chercher rapidement ?`;
+    : `Bonjour, votre annonce m’intéresse. Est-ce que vous accepteriez ${suggestedOffer} $ si je viens le chercher rapidement ?`;
  const maxBuyAdvice=!hasUsableMaxBuy
   ? 'Ce deal n’est pas rentable au prix actuel. Ne négocie que si le vendeur accepte un prix très bas.'
   : '';
- return {ask,costs,hours,timeCost,resale,gross,net,maxBuy,displayMaxBuy,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease};}
+ return {ask,costs,hours,timeCost,resale,gross,net,maxBuy,displayMaxBuy,displayOffer,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease};}
 
 function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? 'bad' : data.decision.includes('LOT') || data.decision.includes('VITE') ? 'warn' : 'good'; return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score}/><p className="score-note">{data.scoreHint}</p>
@@ -228,7 +231,7 @@ function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? '
 
 function FlipResult({ data }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score}/>
-  <p><strong>Prix max conseillé:</strong> {data.displayMaxBuy}</p><p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p>
+  <p><strong>Prix max théorique:</strong> {data.displayMaxBuy}</p><p><strong>Prix de négociation conseillé:</strong> {data.displayOffer}</p><p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p>
   <p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message:</strong> {data.negotiationMessage}</p>
 </article>; }
 
