@@ -10,6 +10,8 @@ const easeByCategory = {
 };
 const easeScore = { bon: 15, moyen: 5, difficile: -15, niche: -5, 'bon mais risqué': 5 };
 const categoryResaleMultiplier = { bijoux: 1.25, meuble: 1.2, 'électroménager': 1.28, outil: 1.32, 'pièce auto': 1.22, vêtement: 1.15, téléphone: 1.27, déco: 1.18, jouet: 1.2, sport: 1.3, autre: 1.2 };
+const flipResaleFloorByCategory = { outil: 35, 'électroménager': 45, sport: 35, téléphone: 80, meuble: 40, bijoux: 25, vêtement: 15, déco: 20, jouet: 20, 'pièce auto': 40, autre: 25 };
+const flipResaleFloorConditionMultiplier = { neuf: 1.2, 'très bon': 1, bon: 0.85, correct: 0.65, abîmé: 0.4 };
 const lotCategories = new Set(['bijoux', 'vêtement', 'jouet', 'déco']);
 
 const money = (n) => `${(Number.isFinite(n) ? n : 0).toFixed(2)} $`;
@@ -203,12 +205,12 @@ function computeSell(form) {
   return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint };
 }
 
-function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const timeCost=hours*5; const resale=ask*categoryResaleMultiplier[form.category]*(1+conditionCoef[form.condition]*0.3); const gross=resale-ask; const net=resale-ask-costs-timeCost; const maxBuy=resale-costs-timeCost-minMargin; const ease=easeByCategory[form.category]; const risk = form.condition==='abîmé' || ease==='difficile' || form.category==='téléphone' ? 'élevé' : ease==='niche' ? 'moyen' : 'faible';
+function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const timeCost=hours*5; const priceBasedResale=ask*categoryResaleMultiplier[form.category]*(1+conditionCoef[form.condition]*0.3); const floorBasedResale=(flipResaleFloorByCategory[form.category]||0)*(flipResaleFloorConditionMultiplier[form.condition]||1); const resale=Math.max(priceBasedResale,floorBasedResale); const gross=resale-ask; const net=resale-ask-costs-timeCost; const maxBuy=resale-costs-timeCost-minMargin; const ease=easeByCategory[form.category]; const risk = form.condition==='abîmé' || ease==='difficile' || form.category==='téléphone' ? 'élevé' : ease==='niche' ? 'moyen' : 'faible';
  const roundedMaxBuy=Math.floor(maxBuy); const hasUsableMaxBuy=maxBuy>=5;
  let decision='ACHÈTE'; let strategy=''; let score=75;
  if(net<=0){decision='LAISSE TOMBER'; score=clamp(20+Math.max(net,-25),0,40); strategy='Marge nette négative : après frais et temps passé, ce deal ne vaut pas le coup.';}
  else if(net<minMargin){decision='NÉGOCIE'; const progress=minMargin>0?net/minMargin:0.5; score=clamp(45+progress*25,45,70); strategy='Marge possible, mais elle devient faible après frais et temps passé. Négocie plus bas.';}
- else {decision='ACHÈTE'; const surplus=net-minMargin; score=clamp(75+surplus*0.8+(risk==='faible'?4:0),75,100); strategy='Marge nette suffisante : bon deal si l’état réel est confirmé.';}
+ else {decision='ACHÈTE'; const surplus=net-minMargin; score=clamp(75+surplus*0.8+(risk==='faible'?4:0),75,100); strategy='Bon deal potentiel : le prix demandé est bas par rapport à la revente probable. Vérifie l’état réel, la marque, les accessoires et teste l’objet avant d’acheter.';}
  const realisticRange=ease==='bon'?[0.7,0.8]:[0.6,0.85];
  const suggestedOffer=Math.round(ask*((realisticRange[0]+realisticRange[1])/2));
  const displayMaxBuy=hasUsableMaxBuy?`${roundedMaxBuy} $`:'Non rentable';
@@ -216,7 +218,7 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  const negotiationMessage = decision==='LAISSE TOMBER'
   ? 'Non rentable'
   : decision==='ACHÈTE'
-    ? `Bonjour, votre annonce m’intéresse. Je peux l’acheter à votre prix demandé de ${money(ask)} si l’état est bien conforme.`
+    ? 'Le prix demandé semble déjà intéressant. Tu peux acheter si l’état est confirmé.'
     : `Bonjour, votre annonce m’intéresse. Est-ce que vous accepteriez ${suggestedOffer} $ si je viens le chercher rapidement ?`;
  const maxBuyAdvice=!hasUsableMaxBuy
   ? 'Ce deal n’est pas rentable au prix actuel. Ne négocie que si le vendeur accepte un prix très bas.'
