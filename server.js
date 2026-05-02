@@ -56,7 +56,26 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
     });
 
     const raw = response.output_text || '{}';
-    const parsed = JSON.parse(raw);
+    console.log('Analyse photo: réponse IA brute reçue');
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    const cleanedJson = raw
+      .replace(/```json/gi, '')
+      .replace(/```/g, '')
+      .slice(firstBrace >= 0 ? firstBrace : 0, lastBrace >= 0 ? lastBrace + 1 : raw.length)
+      .trim();
+    console.log('Analyse photo: JSON nettoyé avant parsing');
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanedJson);
+      console.log('Analyse photo: parsing JSON réussi');
+    } catch (parseError) {
+      console.error('Analyse photo: erreur de parsing JSON', parseError);
+      console.error('Analyse photo: réponse brute', raw);
+      console.error('Analyse photo: JSON nettoyé', cleanedJson);
+      return res.status(500).json({ error: 'Réponse IA invalide' });
+    }
 
     const safe = {
       objectName: typeof parsed.objectName === 'string' ? parsed.objectName : 'objet non certain',
