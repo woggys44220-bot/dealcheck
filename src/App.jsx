@@ -24,6 +24,30 @@ const defaultSellingAdviceByCategory = {
   téléphone: 'Indique l’état de la batterie, le stockage, l’opérateur et si le téléphone est déverrouillé.',
   autre: 'Ajoute des photos nettes, le maximum de détails et l’état réel.'
 };
+const unsafeDescriptionPatterns = [
+  /confirmer\s+le\s+mat[ée]riau/i,
+  /confirmer\s+les\s+mat[ée]riaux/i,
+  /v[ée]rifier?\s+l[’']authenticit[ée]/i,
+  /v[ée]rifiez\s+l[’']authenticit[ée]/i,
+  /ne\s+garantit\s+pas/i,
+  /je\s+ne\s+garantis\s+pas/i,
+  /sous\s+r[ée]serve/i,
+  /l[’']?[ée]tat\s+exact\s+doit\s+[êe]tre\s+confirm[ée]/i,
+  /doit\s+[êe]tre\s+confirm[ée]\s+manuellement/i,
+  /avant\s+achat/i
+];
+
+function cleanMarketplaceDescription(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return '';
+  const sentences = raw
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  const kept = sentences.filter((sentence) => !unsafeDescriptionPatterns.some((pattern) => pattern.test(sentence)));
+  if (kept.length === 0) return raw;
+  return kept.join(' ').replace(/\s{2,}/g, ' ').trim();
+}
 
 function formatCity(city) {
   const trimmedCity = (city || '').trim();
@@ -78,9 +102,10 @@ function SellMode({ onBack }) {
   const [selectedDescriptionType, setSelectedDescriptionType] = useState('detailed');
   const [selectedAiPhotoTips, setSelectedAiPhotoTips] = useState([]);
   const [selectedAiSellingAdvice, setSelectedAiSellingAdvice] = useState('');
+  const [selectedAiWarning, setSelectedAiWarning] = useState('');
   const data = useMemo(
-    () => computeSell(form, Boolean(photoPreview), selectedAiDescription, selectedAiSellingTitle, selectedAiPhotoTips, selectedAiSellingAdvice),
-    [form, photoPreview, selectedAiDescription, selectedAiSellingTitle, selectedAiPhotoTips, selectedAiSellingAdvice]
+    () => computeSell(form, Boolean(photoPreview), selectedAiDescription, selectedAiSellingTitle, selectedAiPhotoTips, selectedAiSellingAdvice, selectedAiWarning),
+    [form, photoPreview, selectedAiDescription, selectedAiSellingTitle, selectedAiPhotoTips, selectedAiSellingAdvice, selectedAiWarning]
   );
 
   useEffect(() => () => {
@@ -122,6 +147,7 @@ function SellMode({ onBack }) {
     setSelectedDescriptionType('detailed');
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
+    setSelectedAiWarning('');
     setAiLoading(false);
     setCopiedMessage('');
     setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
@@ -150,6 +176,7 @@ function SellMode({ onBack }) {
     setSelectedDescriptionType('detailed');
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
+    setSelectedAiWarning('');
     setCopiedMessage('');
     setHasResult(false);
   };
@@ -167,6 +194,7 @@ function SellMode({ onBack }) {
     setSelectedDescriptionType('detailed');
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
+    setSelectedAiWarning('');
     setAiLoading(false);
     setCopiedMessage('');
     setHasResult(false);
@@ -209,8 +237,8 @@ function SellMode({ onBack }) {
     if (!suggestion) return '';
     const shortDescription = (suggestion.shortDescription || '').trim();
     const detailedDescription = (suggestion.detailedDescription || suggestion.description || '').trim();
-    if (selectedDescriptionType === 'short') return shortDescription || detailedDescription;
-    return detailedDescription || shortDescription;
+    if (selectedDescriptionType === 'short') return cleanMarketplaceDescription(shortDescription || detailedDescription);
+    return cleanMarketplaceDescription(detailedDescription || shortDescription);
   };
 
   const useSuggestions = () => {
@@ -225,6 +253,7 @@ function SellMode({ onBack }) {
     setSelectedAiSellingTitle(getChosenTitle(aiSuggestion));
     setSelectedAiPhotoTips(Array.isArray(aiSuggestion.photoTips) ? aiSuggestion.photoTips.map((tip) => String(tip)).filter(Boolean) : []);
     setSelectedAiSellingAdvice((aiSuggestion.sellingAdvice || '').trim());
+    setSelectedAiWarning((aiSuggestion.warning || '').trim());
     setHasResult(false);
   };
 
@@ -419,7 +448,7 @@ function FlipMode({ onBack }) {
 const Header = ({ title, onBack }) => <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>{title}</h2></div>;
 const FormField = ({ label, hint, children, error, invalid }) => <label className={invalid ? 'field-error' : ''}>{label}{hint && <span className="field-hint">{hint}</span>}{children}{error && <span className="field-error-text">{error}</span>}</label>;
 
-function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle = '', aiPhotoTips = [], aiSellingAdvice = '') {
+function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle = '', aiPhotoTips = [], aiSellingAdvice = '', aiWarning = '') {
   const base = Number(form.value) || 0;
   const coef = conditionCoef[form.condition];
   const advised = base * coef;
@@ -474,10 +503,10 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
   const title = `${baseTitle} - ${form.condition} - disponible à ${cityLabel}`;
   const addLot = lotCategories.has(form.category) ? ' Possibilité de faire un prix pour un lot.' : '';
   const photoSentence = hasPhoto ? ' Photos disponibles dans l’annonce.' : '';
-  const aiDescriptionSentence = aiDescription ? ` ${aiDescription}` : ` Idéal pour la catégorie ${form.category}.`;
+  const aiDescriptionSentence = aiDescription ? ` ${cleanMarketplaceDescription(aiDescription)}` : ` Idéal pour la catégorie ${form.category}.`;
   const description = `Je vends ${form.name || 'cet objet'}, en état ${form.condition}.${aiDescriptionSentence} Disponible à ${cityLabel}.${photoSentence} Prix raisonnable. Possibilité de venir voir sur place.${addLot}`;
   const level = ease === 'bon' || ease === 'bon mais risqué' ? 'facile à vendre' : ease;
-  return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint, aiPhotoTips, aiSellingAdvice: normalizedSellingAdvice };
+  return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint, aiPhotoTips, aiSellingAdvice: normalizedSellingAdvice, aiWarning: (aiWarning || '').trim() };
 }
 
 function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const localCount=form.localCount===''?null:Number(form.localCount); const localLow=form.localLow===''?null:Number(form.localLow); const localAvg=form.localAvg===''?null:Number(form.localAvg); const localHigh=form.localHigh===''?null:Number(form.localHigh); const timeCost=hours*5; const isDamaged=form.condition==='abîmé'; const isBulky=form.category==='meuble' || form.category==='électroménager'; const isDamagedBulky=isBulky && isDamaged; const isPhone=form.category==='téléphone'; const isToolGood=form.category==='outil' && form.condition==='bon'; const baseMultiplier=categoryResaleMultiplier[form.category]||1; const conditionImpact=1+conditionCoef[form.condition]*0.3; const damagedPenalty=isDamaged?0.72:1; const bulkyPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct')?0.9:1; const basePriceResale=ask*baseMultiplier*conditionImpact*damagedPenalty*bulkyPenalty; const floorBase=(flipResaleFloorByCategory[form.category]||0)*(flipResaleFloorConditionMultiplier[form.condition]||1); const adjustedFloor=isDamagedBulky?floorBase*0.75:isDamaged?floorBase*0.85:floorBase;
@@ -550,6 +579,7 @@ function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? '
   <p><strong>Niveau:</strong> {data.ease}</p><p><strong>Stratégie:</strong> {data.strategy}</p><p><strong>Titre:</strong> {data.title}</p><p><strong>Description:</strong> {data.description}</p>
   {Array.isArray(data.aiPhotoTips) && data.aiPhotoTips.length > 0 && <div><strong>Conseils photo IA:</strong><ul>{data.aiPhotoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul></div>}
   {data.aiSellingAdvice && <p><strong>Conseil de mise en vente IA:</strong> {data.aiSellingAdvice}</p>}
+  {data.aiWarning && <p><strong>Avertissement IA:</strong> {data.aiWarning}</p>}
 </article>; }
 
 function FlipResult({ data }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; return <article className={`result ${tone}`}>
