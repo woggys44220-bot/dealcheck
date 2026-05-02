@@ -272,7 +272,8 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  if(score<45 && decision==='ACHÈTE') decision='NÉGOCIE';
  if(score<35 && decision==='NÉGOCIE') decision='LAISSE TOMBER';
  const realisticRange=isPhone && decision==='NÉGOCIE'?[0.85,0.95]:isBorderlineToolDeal?[0.75,0.82]:isDamagedBulky?[0.4,0.6]:isDamaged?[0.45,0.65]:ease==='bon'?[0.7,0.8]:[0.6,0.85];
- const suggestedOffer=Math.round(ask*((realisticRange[0]+realisticRange[1])/2));
+ const realisticOffer=Math.round(ask*((realisticRange[0]+realisticRange[1])/2));
+ const suggestedOffer=decision==='NÉGOCIE' && hasUsableMaxBuy?Math.round(Math.min(realisticOffer,roundedMaxBuy)):realisticOffer;
  const displayMaxBuy=hasUsableMaxBuy?`${roundedMaxBuy} $`:'Non rentable';
  const displayOffer=decision==='NÉGOCIE'?`${suggestedOffer} $`:decision==='ACHÈTE'?'Prix demandé correct':'Non rentable';
  const negotiationMessage = decision==='LAISSE TOMBER'
