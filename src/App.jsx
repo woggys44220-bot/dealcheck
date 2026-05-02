@@ -218,7 +218,7 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  const negotiationMessage = decision==='LAISSE TOMBER'
   ? 'Non rentable'
   : decision==='ACHÈTE'
-    ? `Bonjour, votre ${form.name || 'objet'} m’intéresse. Est-ce qu’il est toujours disponible ? Si l’état est bien conforme à l’annonce, je peux venir le chercher rapidement.`
+    ? `Bonjour, votre annonce pour ${form.name || "nom de l’objet"} m’intéresse. Est-ce qu’elle est toujours disponible ? Si l’état est bien conforme à l’annonce, je peux venir le chercher rapidement.`
     : `Bonjour, votre annonce m’intéresse. Est-ce que vous accepteriez ${suggestedOffer} $ si je viens le chercher rapidement ?`;
  const maxBuyAdvice=!hasUsableMaxBuy
   ? 'Ce deal n’est pas rentable au prix actuel. Ne négocie que si le vendeur accepte un prix très bas.'
