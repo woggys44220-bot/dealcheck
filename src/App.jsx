@@ -94,7 +94,7 @@ function SellMode({ onBack }) {
 }
 
 function FlipMode({ onBack }) {
-  const [form, setForm] = useState({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'' });
+  const [form, setForm] = useState({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' });
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState({});
   const [hasResult, setHasResult] = useState(false);
@@ -117,6 +117,19 @@ function FlipMode({ onBack }) {
     if (form.costs !== '' && (!Number.isFinite(costs) || costs < 0)) nextErrors.costs = 'Merci de remplir les champs obligatoires avant l’analyse.';
     const hours = Number(form.hours);
     if (form.hours !== '' && (!Number.isFinite(hours) || hours < 0)) nextErrors.hours = 'Merci de remplir les champs obligatoires avant l’analyse.';
+    const localCount = Number(form.localCount);
+    const localLow = Number(form.localLow);
+    const localAvg = Number(form.localAvg);
+    const localHigh = Number(form.localHigh);
+    const hasLocalLow = form.localLow !== '';
+    const hasLocalAvg = form.localAvg !== '';
+    const hasLocalHigh = form.localHigh !== '';
+    if (form.localCount !== '' && (!Number.isFinite(localCount) || localCount < 0)) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalLow && (!Number.isFinite(localLow) || localLow < 0)) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalAvg && (!Number.isFinite(localAvg) || localAvg < 0)) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalHigh && (!Number.isFinite(localHigh) || localHigh < 0)) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalLow && hasLocalAvg && localLow > localAvg) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
+    if (hasLocalAvg && hasLocalHigh && localAvg > localHigh) nextErrors.localCompetition = 'Vérifie les prix de concurrence : prix bas <= prix moyen <= prix haut.';
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -138,10 +151,18 @@ function FlipMode({ onBack }) {
     <FormField label="Temps estimé (heures)" hint="Temps pour aller chercher, nettoyer, publier l’annonce et vendre l’objet." error={errors.hours} invalid={!!errors.hours}><input type="number" min="0" value={form.hours} onChange={(e)=>{updateFlipField('hours', e.target.value); if (errors.hours) setErrors({...errors,hours:undefined});}}/></FormField>
     <FormField label="Ville / région" error={errors.city} invalid={!!errors.city}><input value={form.city} onChange={(e)=>{updateFlipField('city', e.target.value); if (errors.city) setErrors({...errors,city:undefined});}}/></FormField>
     <FormField label="Marge minimum souhaitée" error={errors.minMargin} invalid={!!errors.minMargin}><input type="number" min="0" value={form.minMargin} onChange={(e)=>{updateFlipField('minMargin', e.target.value); if (errors.minMargin) setErrors({...errors,minMargin:undefined});}}/></FormField>
+    <section>
+      <h3>Concurrence locale</h3>
+      <p className="field-hint">Optionnel : indique ce que tu vois sur les annonces similaires autour de toi pour affiner le verdict.</p>
+      <FormField label="Nombre d’annonces similaires" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localCount} onChange={(e)=>{updateFlipField('localCount', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix le plus bas constaté" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localLow} onChange={(e)=>{updateFlipField('localLow', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix moyen constaté" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localAvg} onChange={(e)=>{updateFlipField('localAvg', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix le plus haut constaté" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localHigh} onChange={(e)=>{updateFlipField('localHigh', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+    </section>
     {Object.keys(errors).length > 0 && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeFlip}>Analyser le deal</button></div>
     {showResult && <FlipResult data={data} />}
-    {showResult && <div className="actions"><button className="primary" onClick={copy}>Copier le message</button><button onClick={()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'' }); setErrors({}); setHasResult(false);}}>Recommencer</button></div>}
+    {showResult && <div className="actions"><button className="primary" onClick={copy}>Copier le message</button><button onClick={()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' }); setErrors({}); setHasResult(false);}}>Recommencer</button></div>}
     {copied && <p className="copied">Message copié ✅</p>}
   </div>;
 }
@@ -205,7 +226,7 @@ function computeSell(form) {
   return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint };
 }
 
-function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const timeCost=hours*5; const isDamaged=form.condition==='abîmé'; const isBulky=form.category==='meuble' || form.category==='électroménager'; const isDamagedBulky=isBulky && isDamaged; const isPhone=form.category==='téléphone'; const isToolGood=form.category==='outil' && form.condition==='bon'; const baseMultiplier=categoryResaleMultiplier[form.category]||1; const conditionImpact=1+conditionCoef[form.condition]*0.3; const damagedPenalty=isDamaged?0.72:1; const bulkyPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct')?0.9:1; const basePriceResale=ask*baseMultiplier*conditionImpact*damagedPenalty*bulkyPenalty; const floorBase=(flipResaleFloorByCategory[form.category]||0)*(flipResaleFloorConditionMultiplier[form.condition]||1); const adjustedFloor=isDamagedBulky?floorBase*0.75:isDamaged?floorBase*0.85:floorBase;
+function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(form.costs)||0; const hours=Number(form.hours)||0; const minMargin=Number(form.minMargin)||0; const localCount=form.localCount===''?null:Number(form.localCount); const localLow=form.localLow===''?null:Number(form.localLow); const localAvg=form.localAvg===''?null:Number(form.localAvg); const localHigh=form.localHigh===''?null:Number(form.localHigh); const timeCost=hours*5; const isDamaged=form.condition==='abîmé'; const isBulky=form.category==='meuble' || form.category==='électroménager'; const isDamagedBulky=isBulky && isDamaged; const isPhone=form.category==='téléphone'; const isToolGood=form.category==='outil' && form.condition==='bon'; const baseMultiplier=categoryResaleMultiplier[form.category]||1; const conditionImpact=1+conditionCoef[form.condition]*0.3; const damagedPenalty=isDamaged?0.72:1; const bulkyPenalty=isBulky && (form.condition==='abîmé' || form.condition==='correct')?0.9:1; const basePriceResale=ask*baseMultiplier*conditionImpact*damagedPenalty*bulkyPenalty; const floorBase=(flipResaleFloorByCategory[form.category]||0)*(flipResaleFloorConditionMultiplier[form.condition]||1); const adjustedFloor=isDamagedBulky?floorBase*0.75:isDamaged?floorBase*0.85:floorBase;
  const categoryFloor=flipResaleFloorByCategory[form.category]||0; const askRatioToFloor=categoryFloor>0?ask/categoryFloor:1;
  const conservativePricePenalty=askRatioToFloor>=1.5?0.82:askRatioToFloor>=1.15?0.9:1;
  const phonePenalty=isPhone?0.9:1; const toolPenalty=isToolGood?0.92:1; const priceBasedResale=basePriceResale*conservativePricePenalty*phonePenalty*toolPenalty;
@@ -231,7 +252,25 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  }
  if(isPhone){strategy='Vérifie IMEI, iCloud, batterie, facture, opérateur et état écran avant achat.';}
  if(isToolGood && !isBorderlineToolDeal){strategy='Bon objet à revendre, mais vérifie batterie, chargeur, marque, puissance et fonctionnement. Négocie si possible.';}
+ const localInsights=[];
+ let localCompetitionLevel='non renseignée';
+ if(Number.isFinite(localCount)){
+  if(localCount<=5){localCompetitionLevel='faible'; score=clamp(score+4,0,100); localInsights.push('Peu d’annonces similaires : bon potentiel si le prix est attractif.');}
+  else if(localCount<=20){localCompetitionLevel='moyenne';}
+  else {localCompetitionLevel='forte'; score=clamp(score-7,0,100); localInsights.push('Beaucoup d’annonces similaires : il faudra vendre moins cher ou avoir de meilleures photos.'); if(ease==='difficile' || risk==='élevé'){score=clamp(score-5,0,100);}}
+ }
+ if(Number.isFinite(localAvg) && localAvg>0){
+  const ratio=ask/localAvg;
+  if(ratio<=0.7){score=clamp(score+5,0,100); localInsights.push('Prix demandé très inférieur au prix moyen : opportunité possible, vérifie l’état réel.');}
+  else if(ratio>=0.85 && ratio<=1.1){score=clamp(score-5,0,100); localInsights.push('Prix demandé proche du prix moyen : négocie avant d’acheter.');}
+  else if(ratio>1.1){score=clamp(score-10,0,100); localInsights.push('Prix demandé au-dessus du marché local : risque de marge faible.');}
+  else {localInsights.push('Prix demandé inférieur au marché local : bon potentiel si l’état est confirmé.');}
+ }
  if(decision==='LAISSE TOMBER' && net<0 && resale>0){score=clamp(Math.max(score,15),10,20);}
+ if(decision!=='LAISSE TOMBER' && net<=0) decision='LAISSE TOMBER';
+ if(decision==='ACHÈTE' && score<70) decision='NÉGOCIE';
+ if(score<45 && decision==='ACHÈTE') decision='NÉGOCIE';
+ if(score<35 && decision==='NÉGOCIE') decision='LAISSE TOMBER';
  const realisticRange=isPhone && decision==='NÉGOCIE'?[0.85,0.95]:isBorderlineToolDeal?[0.75,0.82]:isDamagedBulky?[0.4,0.6]:isDamaged?[0.45,0.65]:ease==='bon'?[0.7,0.8]:[0.6,0.85];
  const suggestedOffer=Math.round(ask*((realisticRange[0]+realisticRange[1])/2));
  const displayMaxBuy=hasUsableMaxBuy?`${roundedMaxBuy} $`:'Non rentable';
@@ -244,7 +283,11 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  const maxBuyAdvice=!hasUsableMaxBuy
   ? 'Ce deal n’est pas rentable au prix actuel. Ne négocie que si le vendeur accepte un prix très bas.'
   : '';
- return {ask,costs,hours,timeCost,resale,gross,net,maxBuy,displayMaxBuy,displayOffer,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease};}
+ const marketRecommendation = localInsights[localInsights.length - 1] || 'Concurrence non renseignée : base-toi sur les marges et le risque du produit.';
+ const observedMarketSummary = Number.isFinite(localLow) && Number.isFinite(localAvg) && Number.isFinite(localHigh)
+  ? `Marché local observé : ${money(localLow)} à ${money(localHigh)}, moyenne ${money(localAvg)}.`
+  : '';
+ return {ask,costs,hours,timeCost,resale,gross,net,maxBuy,displayMaxBuy,displayOffer,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease,localCompetitionLevel,localAveragePrice:localAvg,observedMarketSummary,marketRecommendation};}
 
 function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? 'bad' : data.decision.includes('LOT') || data.decision.includes('VITE') ? 'warn' : 'good'; return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/><p className="score-note">{data.scoreHint}</p>
@@ -260,7 +303,7 @@ function FlipResult({ data }) {const tone = data.decision==='ACHÈTE' ? 'good' :
       ? <p><strong>Prix de négociation conseillé:</strong> Non rentable</p>
       : <><p><strong>Prix max théorique:</strong> {data.displayMaxBuy}</p><p><strong>Prix de négociation conseillé:</strong> {data.displayOffer}</p></>}
   <p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p>
-  <p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message:</strong> {data.negotiationMessage}</p>
+  <p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p><p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message:</strong> {data.negotiationMessage}</p>
 </article>; }
 
 const Score = ({ score, tone: forcedTone }) => {
