@@ -158,7 +158,7 @@ function FlipResult({ data }) {const tone = data.decision==='ACHÈTE' ? 'good' :
 
 const Score = ({ score }) => {
   const tone = score >= 75 ? 'good' : score >= 55 ? 'warn' : 'bad';
-  return <div className={`score ${tone}`}><div className="bar" style={{width:`${score}%`}} /><span>Score {Math.round(score)}/100</span></div>;
+  return <div className="score-block"><div className={`score ${tone}`}><div className="bar" style={{width:`${score}%`}} /></div><p className="score-label">Score {Math.round(score)}/100</p></div>;
 };
 
 export default App;
