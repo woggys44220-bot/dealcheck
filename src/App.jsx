@@ -16,6 +16,7 @@ const lotCategories = new Set(['bijoux', 'vêtement', 'jouet', 'déco']);
 
 const money = (n) => `${(Number.isFinite(n) ? n : 0).toFixed(2)} $`;
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));
+const cleanPrice = (n) => money(Number.isFinite(n) ? n : 0);
 const defaultSellingAdviceByCategory = {
   bijoux: 'Vends ce type de bijou en lot si tu en as plusieurs, car la valeur perçue sera meilleure.',
   vêtement: 'Ajoute des photos portées ou sur cintre, et indique la taille clairement.',
@@ -77,6 +78,23 @@ function formatCity(city) {
       .map((chunk) => chunk ? `${chunk.charAt(0).toUpperCase()}${chunk.slice(1).toLowerCase()}` : chunk)
       .join('-'))
     .join(' ');
+}
+
+function getSellDecisionSummary(data) {
+  const hasStrongLocalCompetition = data.localCompetitionLevel === 'forte' && Number.isFinite(data.localAveragePrice);
+  if (data.decision === 'VENDS EN LOT') return { todo: `Vends en lot autour de ${cleanPrice(data.advised)}.`, why: hasStrongLocalCompetition ? `Concurrence forte et prix moyen local autour de ${cleanPrice(data.localAveragePrice)}.` : 'Catégorie concurrentielle ou valeur perçue meilleure en lot.', action: hasStrongLocalCompetition ? 'Reste proche du marché ou propose un lot pour te démarquer.' : 'Prépare 3 ou 4 objets similaires, belles photos et prix attractif.' };
+  if (data.decision === 'VENDS VITE') return { todo: `Mets un prix autour de ${cleanPrice(data.quick)}.`, why: 'Objectif vente rapide.', action: 'Publie avec des photos claires et réponds vite aux messages.' };
+  if (data.decision === 'PRIX CORRECT') return { todo: `Publie autour de ${cleanPrice(data.advised)}.`, why: 'Prix cohérent avec l’objet et le marché.', action: 'Teste ce prix, puis baisse légèrement si aucun message.' };
+  if (data.decision.includes('ATTENDS')) return { todo: `Teste le prix haut autour de ${cleanPrice(data.high)}.`, why: 'Tu cherches à maximiser le prix.', action: 'Prépare une annonce plus détaillée et accepte d’attendre.' };
+  return { todo: `Ajuste ton prix autour de ${cleanPrice(data.advised)}.`, why: 'Le marché demande un positionnement plus compétitif.', action: 'Revois le prix et optimise l’annonce avant de republier.' };
+}
+
+function getFlipDecisionSummary(data, category) {
+  const hasStrongLocalCompetition = data.localCompetitionLevel === 'forte';
+  const isPhone = category === 'téléphone';
+  if (data.decision === 'ACHÈTE') return { todo: 'Tu peux acheter si l’état est confirmé.', why: `Marge nette estimée suffisante : ${cleanPrice(data.net)}.`, action: isPhone ? 'Vérifie IMEI, iCloud, batterie, facture, opérateur et écran.' : 'Vérifie l’état, les accessoires et récupère rapidement.' };
+  if (data.decision === 'NÉGOCIE') return { todo: `Négocie autour de ${cleanPrice(Number.isFinite(data.suggestedOffer) ? data.suggestedOffer : 0)}.`, why: hasStrongLocalCompetition ? 'La marge est limite au prix actuel. Concurrence locale forte.' : 'La marge est limite au prix actuel.', action: isPhone ? 'Vérifie IMEI, iCloud, batterie, facture, opérateur et écran.' : hasStrongLocalCompetition ? 'Négocie plus bas ou cherche une annonce moins concurrencée.' : 'Envoie le message de négociation et n’achète pas au prix affiché.' };
+  return { todo: 'Évite ce deal.', why: 'Marge nette insuffisante ou risque trop élevé.', action: 'Passe à une autre annonce, sauf très forte baisse du vendeur.' };
 }
 
 function App() {
@@ -478,7 +496,7 @@ function FlipMode({ onBack }) {
     </section>
     {Object.keys(errors).length > 0 && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeFlip}>Analyser le deal</button></div>
-    {showResult && <FlipResult data={data} />}
+    {showResult && <FlipResult data={data} category={form.category} />}
     {showResult && <div className="actions"><button className="primary" onClick={copy}>Copier le message</button><button onClick={()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' }); setErrors({}); setHasResult(false);}}>Recommencer</button></div>}
     {copied && <p className="copied">Message copié ✅</p>}
   </div>;
@@ -707,10 +725,11 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  const observedMarketSummary = Number.isFinite(localLow) && Number.isFinite(localAvg) && Number.isFinite(localHigh)
   ? `Marché local observé : ${money(localLow)} à ${money(localHigh)}, moyenne ${money(localAvg)}.`
   : '';
- return {ask,costs,hours,timeCost,resale,gross,net,maxBuy,displayMaxBuy,displayOffer,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease,localCompetitionLevel,localAveragePrice:localAvg,observedMarketSummary,marketRecommendation};}
+ return {ask,costs,hours,timeCost,resale,gross,net,maxBuy,displayMaxBuy,displayOffer,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease,localCompetitionLevel,localAveragePrice:localAvg,observedMarketSummary,marketRecommendation,suggestedOffer};}
 
-function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? 'bad' : data.decision.includes('LOT') || data.decision.includes('VITE') ? 'warn' : 'good'; return <article className={`result ${tone}`}>
+function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? 'bad' : data.decision.includes('LOT') || data.decision.includes('VITE') ? 'warn' : 'good'; const summary = getSellDecisionSummary(data); return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/><p className="score-note">{data.scoreHint}</p>
+  <section className="decision-summary"><p className="decision-summary-title">Résumé décision</p><p><strong>À faire :</strong> {summary.todo}</p><p><strong>Pourquoi :</strong> {summary.why}</p><p><strong>Action :</strong> {summary.action}</p></section>
   <p><strong>Prix vente rapide:</strong> {money(data.quick)}</p><p><strong>Prix conseillé:</strong> {money(data.advised)}</p><p><strong>Prix haut:</strong> {money(data.high)}</p>
   <p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p>
   <p><strong>Niveau:</strong> {data.ease}</p><p><strong>Stratégie:</strong> {data.strategy}</p><p><strong>Titre:</strong> {data.title}</p><p><strong>Description:</strong> {data.description}</p>
@@ -719,8 +738,9 @@ function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? '
   {data.aiWarning && <p><strong>Avertissement IA:</strong> {data.aiWarning}</p>}
 </article>; }
 
-function FlipResult({ data }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; return <article className={`result ${tone}`}>
+function FlipResult({ data, category }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; const summary = getFlipDecisionSummary(data, category); return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/>
+  <section className="decision-summary"><p className="decision-summary-title">Résumé décision</p><p><strong>À faire :</strong> {summary.todo}</p><p><strong>Pourquoi :</strong> {summary.why}</p><p><strong>Action :</strong> {summary.action}</p></section>
   {data.decision==='ACHÈTE'
     ? <><p><strong>Prix demandé:</strong> {money(data.ask)}</p><p><strong>Prix demandé correct</strong></p></>
     : data.decision==='LAISSE TOMBER'
