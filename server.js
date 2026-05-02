@@ -64,7 +64,7 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
           content: [
             {
               type: 'input_text',
-              text: `Analyse cette photo d'objet à vendre. Retourne uniquement un JSON strict avec: objectName, category, condition, keywords, description, confidence, warning.\nCatégories autorisées: ${allowedCategories.join(', ')}.\nÉtats autorisés: ${allowedConditions.join(', ')}.\nConfiance autorisée: ${allowedConfidence.join(', ')}.\nRègles: si incertain catégorie=autre et confidence=faible; ne pas inventer marque; ne jamais affirmer neuf uniquement depuis photo; état apparent uniquement; warning doit toujours rappeler confirmation manuelle.`
+              text: `Analyse cette photo d'objet à vendre. Retourne uniquement un JSON strict avec: objectName, category, condition, keywords, description, confidence, warning, shortTitle, sellingTitle, shortDescription, detailedDescription, photoTips, sellingAdvice.\nCatégories autorisées: ${allowedCategories.join(', ')}.\nÉtats autorisés: ${allowedConditions.join(', ')}.\nConfiance autorisée: ${allowedConfidence.join(', ')}.\nRègles: si incertain catégorie=autre et confidence=faible; ne pas inventer marque; ne jamais affirmer neuf uniquement depuis photo; état apparent uniquement; warning doit toujours rappeler confirmation manuelle; ne pas inventer de détail non visible; photoTips doit être un tableau de 0 à 5 conseils utiles; sellingAdvice doit rester prudent et réaliste.`
             },
             { type: 'input_image', image_url: dataUrl }
           ]
@@ -95,7 +95,13 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
       keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 8).map((k) => String(k)) : [],
       description: typeof parsed.description === 'string' ? parsed.description : 'Description à compléter manuellement.',
       confidence: allowedConfidence.includes(parsed.confidence) ? parsed.confidence : 'faible',
-      warning: typeof parsed.warning === 'string' ? parsed.warning : 'L’état exact doit être confirmé manuellement.'
+      warning: typeof parsed.warning === 'string' ? parsed.warning : 'L’état exact doit être confirmé manuellement.',
+      shortTitle: typeof parsed.shortTitle === 'string' ? parsed.shortTitle : '',
+      sellingTitle: typeof parsed.sellingTitle === 'string' ? parsed.sellingTitle : '',
+      shortDescription: typeof parsed.shortDescription === 'string' ? parsed.shortDescription : '',
+      detailedDescription: typeof parsed.detailedDescription === 'string' ? parsed.detailedDescription : '',
+      photoTips: Array.isArray(parsed.photoTips) ? parsed.photoTips.slice(0, 5).map((tip) => String(tip)) : [],
+      sellingAdvice: typeof parsed.sellingAdvice === 'string' ? parsed.sellingAdvice : ''
     };
 
     if (!safe.warning.toLowerCase().includes('manuell')) {
