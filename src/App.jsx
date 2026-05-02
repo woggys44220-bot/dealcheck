@@ -63,7 +63,7 @@ function Home({ setMode }) {
 
 function SellMode({ onBack }) {
   const [form, setForm] = useState({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
-  const [copied, setCopied] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState('');
   const [errors, setErrors] = useState({});
   const [hasResult, setHasResult] = useState(false);
   const [photoPreview, setPhotoPreview] = useState('');
@@ -123,6 +123,7 @@ function SellMode({ onBack }) {
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
     setAiLoading(false);
+    setCopiedMessage('');
     setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
     setErrors({});
     setHasResult(false);
@@ -149,6 +150,7 @@ function SellMode({ onBack }) {
     setSelectedDescriptionType('detailed');
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
+    setCopiedMessage('');
     setHasResult(false);
   };
 
@@ -166,6 +168,7 @@ function SellMode({ onBack }) {
     setSelectedAiPhotoTips([]);
     setSelectedAiSellingAdvice('');
     setAiLoading(false);
+    setCopiedMessage('');
     setHasResult(false);
   };
 
@@ -226,11 +229,32 @@ function SellMode({ onBack }) {
   };
 
   const showResult = hasResult;
-  const copy = async () => {
+  const showPhotoTipsCopyButton = Array.isArray(data.aiPhotoTips) && data.aiPhotoTips.length > 0;
+  const copyText = async (text, successMessage) => {
     if (!showResult) return;
-    await navigator.clipboard.writeText(`${data.title}\n\n${data.description}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1400);
+    const cleanedText = (text || '').trim();
+    if (!cleanedText) return;
+    await navigator.clipboard.writeText(cleanedText);
+    setCopiedMessage(successMessage);
+    setTimeout(() => setCopiedMessage(''), 2200);
+  };
+
+  const copyTitle = async () => copyText(data.title, 'Titre copié ✅');
+  const copyDescription = async () => copyText(data.description, 'Description copiée ✅');
+  const copyFullAd = async () => {
+    const title = (data.title || '').trim();
+    const description = (data.description || '').trim();
+    const advisedPrice = (data.advised || '').trim();
+    const fullAd = [
+      title ? `Titre :\n${title}` : '',
+      advisedPrice ? `Prix conseillé :\n${advisedPrice}` : '',
+      description ? `Description :\n${description}` : ''
+    ].filter(Boolean).join('\n\n');
+    await copyText(fullAd, 'Annonce copiée ✅');
+  };
+  const copyPhotoTips = async () => {
+    const tips = Array.isArray(data.aiPhotoTips) ? data.aiPhotoTips.map((tip) => (tip || '').trim()).filter(Boolean) : [];
+    await copyText(tips.join('\n'), 'Conseils copiés ✅');
   };
   return <div>
     <Header title="Mode vente" onBack={onBack} />
@@ -302,8 +326,14 @@ function SellMode({ onBack }) {
     {(errors.form || errors.name || errors.value || errors.city) && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeSell}>Analyser mon objet</button></div>
     {showResult && <SellResult data={data} />}
-    {showResult && <div className="actions"><button className="primary" onClick={copy}>Copier l’annonce</button><button onClick={resetSellForm}>Recommencer</button></div>}
-    {copied && <p className="copied">Annonce copiée ✅</p>}
+    {showResult && <div className="actions">
+      <button className="primary" onClick={copyTitle}>Copier le titre</button>
+      <button className="secondary" onClick={copyDescription}>Copier la description</button>
+      <button className="secondary" onClick={copyFullAd}>Copier l’annonce complète</button>
+      {showPhotoTipsCopyButton && <button className="secondary" onClick={copyPhotoTips}>Copier les conseils photo</button>}
+      <button onClick={resetSellForm}>Recommencer</button>
+    </div>}
+    {copiedMessage && <p className="copied">{copiedMessage}</p>}
   </div>;
 }
 
