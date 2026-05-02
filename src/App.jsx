@@ -37,6 +37,24 @@ const unsafeDescriptionPatterns = [
   /avant\s+achat/i
 ];
 
+function normalizeSellWarning(warning) {
+  const rawWarning = String(warning || '').trim();
+  if (!rawWarning) return '';
+  const lowerWarning = rawWarning.toLowerCase();
+
+  if (lowerWarning.includes("avant l'achat") || lowerWarning.includes('avant achat') || lowerWarning.includes('auprès du vendeur') || lowerWarning.includes('aupres du vendeur')) {
+    if (/perles?/i.test(rawWarning) || /mat[ée]riau/i.test(rawWarning) || /marque/i.test(rawWarning)) {
+      return 'Ne promets pas une matière ou une marque si ce n’est pas certain.';
+    }
+    if (/dimensions?/i.test(rawWarning) || /[ée]l[ée]ments? visibles?/i.test(rawWarning)) {
+      return 'Confirme les dimensions, l’état et les éléments visibles avant la mise en vente.';
+    }
+    return 'Vérifie l’état réel et les détails de l’objet avant de publier l’annonce.';
+  }
+
+  return rawWarning;
+}
+
 function cleanMarketplaceDescription(text) {
   const raw = String(text || '').trim();
   if (!raw) return '';
@@ -516,20 +534,26 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
       advised *= 0.93;
       high *= 0.96;
       score -= 6;
-      marketRecommendation = 'Ton prix semble au-dessus du marché local. Pour vendre plus vite, rapproche-toi du prix moyen.';
+      marketRecommendation = localCompetitionLevel === 'forte'
+        ? 'Concurrence forte et prix moyen local bas : privilégie un prix attractif, de bonnes photos et la vente en lot.'
+        : 'Prix moyen local plus bas que ton estimation : pour vendre plus vite, rapproche-toi du marché ou vends en lot.';
     } else if (ratioToLocalAvg <= 0.8) {
       high = Math.max(high, localAvg * 1.05);
       score += 2;
-      marketRecommendation = 'Le marché local semble plus haut que ton estimation. Tu peux tester un prix un peu supérieur.';
+      marketRecommendation = 'Le marché local semble plus haut que ton estimation : tu peux tester un prix légèrement plus ambitieux.';
     } else {
       marketRecommendation = 'Ton prix est cohérent avec le marché local.';
     }
   }
 
-  if (Number.isFinite(localAvg) && Number.isFinite(localLow) && localAvg <= localLow * 1.12) {
+  if (Number.isFinite(localAvg) && Number.isFinite(localLow) && localAvg <= localLow * 1.12 && advised <= localAvg) {
     marketRecommendation = 'Prix local bas : attention à ne pas surestimer l’objet.';
   } else if (Number.isFinite(localAvg) && Number.isFinite(localHigh) && localHigh >= localAvg * 1.4) {
-    marketRecommendation = 'Prix local élevé : tu peux tester un prix plus ambitieux.';
+    marketRecommendation = advised > localAvg
+      ? (localCompetitionLevel === 'forte'
+        ? 'Concurrence forte et prix moyen local bas : privilégie un prix attractif, de bonnes photos et la vente en lot.'
+        : 'Prix moyen local plus bas que ton estimation : pour vendre plus vite, rapproche-toi du marché ou vends en lot.')
+      : 'Le marché local semble plus haut que ton estimation : tu peux tester un prix légèrement plus ambitieux.';
   }
 
   score = clamp(score);
@@ -589,7 +613,7 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
     scoreHint,
     aiPhotoTips,
     aiSellingAdvice: normalizedSellingAdvice,
-    aiWarning: (aiWarning || '').trim(),
+    aiWarning: normalizeSellWarning(aiWarning),
     localCompetitionLevel,
     localAveragePrice: localAvg,
     observedMarketSummary,
