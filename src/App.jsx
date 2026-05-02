@@ -52,7 +52,8 @@ function SellMode({ onBack }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiSuggestion, setAiSuggestion] = useState(null);
-  const data = useMemo(() => computeSell(form, Boolean(photoPreview)), [form, photoPreview]);
+  const [selectedAiDescription, setSelectedAiDescription] = useState('');
+  const data = useMemo(() => computeSell(form, Boolean(photoPreview), selectedAiDescription), [form, photoPreview, selectedAiDescription]);
 
   useEffect(() => () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -87,6 +88,7 @@ function SellMode({ onBack }) {
     setPhotoError('');
     setAiError('');
     setAiSuggestion(null);
+    setSelectedAiDescription('');
     setAiLoading(false);
     setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0] });
     setErrors({});
@@ -108,6 +110,7 @@ function SellMode({ onBack }) {
     setPhotoFile(file);
     setAiError('');
     setAiSuggestion(null);
+    setSelectedAiDescription('');
     setHasResult(false);
   };
 
@@ -118,6 +121,7 @@ function SellMode({ onBack }) {
     setPhotoError('');
     setAiError('');
     setAiSuggestion(null);
+    setSelectedAiDescription('');
     setAiLoading(false);
     setHasResult(false);
   };
@@ -153,6 +157,7 @@ function SellMode({ onBack }) {
       category: categories.includes(aiSuggestion.category) ? aiSuggestion.category : prev.category,
       condition: conditions.includes(aiSuggestion.condition) ? aiSuggestion.condition : prev.condition
     }));
+    setSelectedAiDescription((aiSuggestion.description || '').trim());
     setHasResult(false);
   };
 
@@ -294,7 +299,7 @@ function FlipMode({ onBack }) {
 const Header = ({ title, onBack }) => <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>{title}</h2></div>;
 const FormField = ({ label, hint, children, error, invalid }) => <label className={invalid ? 'field-error' : ''}>{label}{hint && <span className="field-hint">{hint}</span>}{children}{error && <span className="field-error-text">{error}</span>}</label>;
 
-function computeSell(form, hasPhoto = false) {
+function computeSell(form, hasPhoto = false, aiDescription = '') {
   const base = Number(form.value) || 0;
   const coef = conditionCoef[form.condition];
   const advised = base * coef;
@@ -346,7 +351,8 @@ function computeSell(form, hasPhoto = false) {
   const title = `${form.name || 'Objet'} - ${form.condition} - disponible à ${form.city || 'votre ville'}`;
   const addLot = lotCategories.has(form.category) ? ' Possibilité de faire un prix pour un lot.' : '';
   const photoSentence = hasPhoto ? ' Photos disponibles dans l’annonce.' : '';
-  const description = `Je vends ${form.name || 'cet objet'}, en état ${form.condition}. Idéal pour la catégorie ${form.category}. Disponible à ${form.city || 'votre ville'}.${photoSentence} Prix raisonnable. Possibilité de venir voir sur place.${addLot}`;
+  const aiDescriptionSentence = aiDescription ? ` ${aiDescription}` : ` Idéal pour la catégorie ${form.category}.`;
+  const description = `Je vends ${form.name || 'cet objet'}, en état ${form.condition}.${aiDescriptionSentence} Disponible à ${form.city || 'votre ville'}.${photoSentence} Prix raisonnable. Possibilité de venir voir sur place.${addLot}`;
   const level = ease === 'bon' || ease === 'bon mais risqué' ? 'facile à vendre' : ease;
   return { quick, advised, high, score, ease: level, strategy, decision, title, description, scoreHint };
 }
