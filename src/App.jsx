@@ -484,6 +484,13 @@ function FlipMode({ onBack, onSaveHistory }) {
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState({});
   const [hasResult, setHasResult] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoError, setPhotoError] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiSuggestion, setAiSuggestion] = useState(null);
+  const [flipAiChecks, setFlipAiChecks] = useState({ risksToCheck: [], questionsToAsk: [], accessoriesToCheck: [], warning: '' });
   const data = useMemo(()=>computeFlip(form), [form]);
 
   const updateFlipField = (field, value) => {
@@ -523,13 +530,51 @@ function FlipMode({ onBack, onSaveHistory }) {
   const analyzeFlip = () => {
     if (!validateFlipForm()) return;
     setHasResult(true);
-    onSaveHistory(buildFlipHistoryEntry(form, data));
+    onSaveHistory(buildFlipHistoryEntry(form, data, Boolean(photoPreview), flipAiChecks));
+  };
+
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setPhotoError('Merci d’ajouter une image valide.'); event.target.value = ''; return; }
+    setPhotoError('');
+    const nextPreview = URL.createObjectURL(file);
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(nextPreview);
+    setPhotoFile(file);
+    setAiError(''); setAiSuggestion(null);
+    setFlipAiChecks({ risksToCheck: [], questionsToAsk: [], accessoriesToCheck: [], warning: '' });
+    setHasResult(false);
+  };
+
+  const removePhoto = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(''); setPhotoFile(null); setPhotoError(''); setAiError(''); setAiSuggestion(null); setAiLoading(false);
+    setFlipAiChecks({ risksToCheck: [], questionsToAsk: [], accessoriesToCheck: [], warning: '' });
+    setHasResult(false);
+  };
+
+  const analyzePhoto = async () => {
+    if (!photoFile) { setAiError('Ajoute une photo avant de lancer l’analyse.'); return; }
+    setAiLoading(true); setAiError(''); setAiSuggestion(null);
+    try { const body = new FormData(); body.append('photo', photoFile); const response = await fetch('/api/analyze-photo', { method: 'POST', body }); const result = await response.json(); if (!response.ok) throw new Error(`api_${response.status}`); setAiSuggestion(result); }
+    catch (_error) { setAiError('Impossible d’analyser la photo pour le moment. Tu peux continuer manuellement.'); }
+    finally { setAiLoading(false); }
+  };
+
+  const useSuggestions = () => {
+    if (!aiSuggestion) return;
+    setForm((prev) => ({ ...prev, name: safeText(aiSuggestion.objectName, prev.name), category: categories.includes(aiSuggestion.category) ? aiSuggestion.category : prev.category, condition: conditions.includes(aiSuggestion.condition) ? aiSuggestion.condition : prev.condition }));
+    setFlipAiChecks({ risksToCheck: Array.isArray(aiSuggestion.risksToCheck) ? aiSuggestion.risksToCheck.map((v) => String(v)).filter(Boolean) : [], questionsToAsk: Array.isArray(aiSuggestion.questionsToAsk) ? aiSuggestion.questionsToAsk.map((v) => String(v)).filter(Boolean) : [], accessoriesToCheck: Array.isArray(aiSuggestion.accessoriesToCheck) ? aiSuggestion.accessoriesToCheck.map((v) => String(v)).filter(Boolean) : [], warning: safeText(aiSuggestion.warning, '') });
+    setHasResult(false);
   };
 
   const showResult = hasResult;
   const copy = async ()=>{ if (!showResult) return; await navigator.clipboard.writeText(data.negotiationMessage); setCopied(true); setTimeout(()=>setCopied(false), 1400); };
   return <div>
     <Header title="Mode achat-revente" onBack={onBack} />
+    <section className="photo-block"><h3>Photo de l’objet</h3><p className="field-hint">Optionnel : ajoute une photo de l’annonce pour aider DealCheck à reconnaître l’objet. Vérifie toujours manuellement avant d’acheter.</p><label className={photoError ? 'field-error' : ''}>Importer une photo<input type="file" accept="image/jpg,image/jpeg,image/png,image/webp" onChange={handlePhotoChange} />{photoError && <span className="field-error-text">{photoError}</span>}</label>{photoPreview && <div className="photo-preview-card"><img src={photoPreview} alt="Aperçu de l’objet" className="photo-preview" /><button type="button" onClick={removePhoto}>Supprimer la photo</button></div>}</section>
+    <section className="photo-ai-block"><h3>Analyse photo IA</h3>{!aiLoading && <button type="button" onClick={analyzePhoto}>Analyser la photo</button>}{aiLoading && <p className="photo-note">Analyse en cours…</p>}{aiError && <p className="form-error">{aiError}</p>}{aiSuggestion && <article className="ai-suggestion"><h4>Suggestion IA</h4><section className="ai-section ai-summary"><p className="ai-section-title"><strong>Résumé IA</strong></p><p><strong>Objet détecté :</strong> {aiSuggestion.objectName || '—'}</p><p><strong>Catégorie proposée :</strong> {aiSuggestion.category || '—'}</p><p><strong>État apparent :</strong> {aiSuggestion.condition || '—'}</p><p><strong>Confiance :</strong> {aiSuggestion.confidence || '—'}</p></section><details className="ai-section ai-details"><summary><strong>Voir les détails IA</strong></summary><div className="ai-details-content"><p><strong>Mots-clés :</strong> {Array.isArray(aiSuggestion.keywords) ? aiSuggestion.keywords.join(', ') : '—'}</p><p><strong>Description proposée :</strong> {aiSuggestion.description || '—'}</p><div><strong>Risques à vérifier :</strong>{Array.isArray(aiSuggestion.risksToCheck) && aiSuggestion.risksToCheck.length > 0 ? <ul>{aiSuggestion.risksToCheck.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <span> —</span>}</div><div><strong>Points à demander au vendeur :</strong>{Array.isArray(aiSuggestion.questionsToAsk) && aiSuggestion.questionsToAsk.length > 0 ? <ul>{aiSuggestion.questionsToAsk.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <span> —</span>}</div><div><strong>Accessoires à vérifier :</strong>{Array.isArray(aiSuggestion.accessoriesToCheck) && aiSuggestion.accessoriesToCheck.length > 0 ? <ul>{aiSuggestion.accessoriesToCheck.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <span> —</span>}</div><p><strong>Avertissement :</strong> {aiSuggestion.warning || '—'}</p></div></details><button type="button" onClick={useSuggestions}>Utiliser ces suggestions</button></article>}</section>
     <FormField label="Nom de l’objet" error={errors.name} invalid={!!errors.name}><input value={form.name} onChange={(e)=>{updateFlipField('name', e.target.value); if (errors.name) setErrors({...errors,name:undefined});}}/></FormField>
     <FormField label="Catégorie"><select value={form.category} onChange={(e)=>updateFlipField('category', e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></FormField>
     <FormField label="État"><select value={form.condition} onChange={(e)=>updateFlipField('condition', e.target.value)}>{conditions.map(c=><option key={c}>{c}</option>)}</select></FormField>
@@ -550,7 +595,7 @@ function FlipMode({ onBack, onSaveHistory }) {
     {errors.amounts && <p className="form-error">{errors.amounts}</p>}
     {Object.keys(errors).some((key) => key !== 'amounts') && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeFlip}>Analyser le deal</button></div>
-    {showResult && <FlipResult data={data} category={form.category} actions={{ copy, reset: ()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' }); setErrors({}); setHasResult(false);} }} />}
+    {showResult && <FlipResult data={data} category={form.category} aiChecks={flipAiChecks} actions={{ copy, reset: ()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' }); setErrors({}); setHasResult(false); if (photoPreview) URL.revokeObjectURL(photoPreview); setPhotoPreview(''); setPhotoFile(null); setPhotoError(''); setAiError(''); setAiSuggestion(null); setAiLoading(false); setFlipAiChecks({ risksToCheck: [], questionsToAsk: [], accessoriesToCheck: [], warning: '' });} }} />}
     {copied && <p className="copied">Message copié ✅</p>}
   </div>;
 }
@@ -990,7 +1035,7 @@ function SellResult({ data, actions }) {const tone = data.decision.includes('BAI
   <section className="result-section"><p className="result-section-title">Actions</p><div className="actions"><button className="primary" onClick={actions.copyTitle}>Copier le titre</button><button className="secondary" onClick={actions.copyDescription}>Copier la description</button><button className="secondary" onClick={actions.copyFullAd}>Copier l’annonce complète</button>{actions.showPhotoTipsCopyButton && <button className="secondary" onClick={actions.copyPhotoTips}>Copier les conseils photo</button>}<button onClick={actions.resetSellForm}>Recommencer</button></div></section>
 </article>; }
 
-function FlipResult({ data, category, actions }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; const summary = getFlipDecisionSummary(data, category); const showLocalMarket = data.localCompetitionLevel !== 'non renseignée' || Number.isFinite(data.localAveragePrice) || Boolean(data.observedMarketSummary); return <article className={`result ${tone}`}>
+function FlipResult({ data, category, aiChecks, actions }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; const summary = getFlipDecisionSummary(data, category); const showLocalMarket = data.localCompetitionLevel !== 'non renseignée' || Number.isFinite(data.localAveragePrice) || Boolean(data.observedMarketSummary); const hasAiChecks = (aiChecks?.risksToCheck?.length || aiChecks?.questionsToAsk?.length || aiChecks?.accessoriesToCheck?.length || aiChecks?.warning); return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/>
   <section className="decision-summary"><p className="decision-summary-title">Résumé décision</p><p><strong>À faire :</strong> {summary.todo}</p><p><strong>Pourquoi :</strong> {summary.why}</p><p><strong>Action :</strong> {summary.action}</p></section>
   <section className="result-section"><p className="result-section-title">Prix et marge</p>{data.decision==='ACHÈTE'
@@ -999,7 +1044,7 @@ function FlipResult({ data, category, actions }) {const tone = data.decision==='
       ? <p><strong>Prix de négociation conseillé:</strong> Non rentable</p>
       : <><p><strong>Prix max théorique:</strong> {data.displayMaxBuy}</p><p><strong>Prix de négociation conseillé:</strong> {data.displayOffer}</p></>}
   <p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p></section>
-  <section className="result-section"><p className="result-section-title">Risque et revente</p><p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p></section>
+  {hasAiChecks && <section className="result-section"><p className="result-section-title">Vérifications IA avant achat</p>{aiChecks.risksToCheck?.length > 0 && <div><p><strong>Risques à vérifier :</strong></p><ul>{aiChecks.risksToCheck.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}{aiChecks.questionsToAsk?.length > 0 && <div><p><strong>Questions à poser au vendeur :</strong></p><ul>{aiChecks.questionsToAsk.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}{aiChecks.accessoriesToCheck?.length > 0 && <div><p><strong>Accessoires à vérifier :</strong></p><ul>{aiChecks.accessoriesToCheck.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}{aiChecks.warning && <p><strong>Avertissement IA :</strong> {aiChecks.warning}</p>}</section>}<section className="result-section"><p className="result-section-title">Risque et revente</p><p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p></section>
   {showLocalMarket && <section className="result-section"><p className="result-section-title">Marché local</p><p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p></section>}
   <section className="result-section"><p className="result-section-title">Conseil</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message vendeur:</strong> {data.negotiationMessage}</p></section>
   <section className="result-section"><p className="result-section-title">Actions</p><div className="actions"><button className="primary" onClick={actions.copy}>Copier le message</button><button onClick={actions.reset}>Recommencer</button></div></section>
@@ -1078,7 +1123,7 @@ function saveHistory(entries) { localStorage.setItem(HISTORY_KEY, JSON.stringify
 function createHistoryId() { return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
 function formatHistoryDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Date inconnue' : date.toLocaleString('fr-CA'); }
 function buildSellHistoryEntry(form, data, photoUsed) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'sell', modeLabel: 'Vente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Prix conseillé', keyMetricValue: safeMoney(data.advised), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'vente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix vente rapide': safeMoney(data.quick), 'Prix conseillé': safeMoney(data.advised), 'Prix haut': safeMoney(data.high), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), 'Titre final': safeText(data.title, 'N/A'), 'Description finale': safeText(data.description, 'N/A'), photoUsed: photoUsed ? 'true' : 'false' } }; }
-function buildFlipHistoryEntry(form, data) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'flip', modeLabel: 'Achat-revente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Marge nette', keyMetricValue: safeMoney(data.net), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'achat-revente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix demandé': safeMoney(form.ask), 'Prix revente probable': safeMoney(data.resale), 'Marge brute': safeMoney(data.gross), 'Marge nette': safeMoney(data.net), 'Prix négociation conseillé': safeMoney(data.suggestedOffer), Risque: safeText(data.risk, 'N/A'), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), photoUsed: 'false' } }; }
+function buildFlipHistoryEntry(form, data, photoUsed = false, aiChecks = {}) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'flip', modeLabel: 'Achat-revente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Marge nette', keyMetricValue: safeMoney(data.net), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'achat-revente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix demandé': safeMoney(form.ask), 'Prix revente probable': safeMoney(data.resale), 'Marge brute': safeMoney(data.gross), 'Marge nette': safeMoney(data.net), 'Prix négociation conseillé': safeMoney(data.suggestedOffer), Risque: safeText(data.risk, 'N/A'), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), 'Risques IA': Array.isArray(aiChecks.risksToCheck) ? aiChecks.risksToCheck.join(', ') : '', 'Questions IA vendeur': Array.isArray(aiChecks.questionsToAsk) ? aiChecks.questionsToAsk.join(', ') : '', 'Accessoires IA': Array.isArray(aiChecks.accessoriesToCheck) ? aiChecks.accessoriesToCheck.join(', ') : '', photoUsed: photoUsed ? 'true' : 'false' } }; }
 function buildOpportunityHistoryEntry(form, data) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'opportunities', modeLabel: 'Recherche', category: safeText(form.category, 'autre'), decision: safeText(data.summary?.todo, 'N/A'), keyMetricLabel: 'Prix max conseillé', keyMetricValue: safeMoney(data.priceRange?.max), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'recherche opportunités', Catégorie: safeText(form.category, 'autre'), Ville: safeText(form.city, 'N/A'), Budget: safeMoney(form.budget), 'Marge minimum': safeMoney(form.minMargin), 'Risque accepté': safeText(form.risk, 'N/A'), 'Objets recommandés': (data.items || []).map((v) => safeText(v)).filter(Boolean).join(', '), 'Prix achat cible': `${safeMoney(data.priceRange?.low)} - ${safeMoney(data.priceRange?.max)}`, 'Plan d’action': safeText(data.plan, 'N/A'), photoUsed: 'false' } }; }
 
 function downloadFile(filename, content, mimeType) {
