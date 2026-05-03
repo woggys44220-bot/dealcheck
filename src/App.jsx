@@ -783,13 +783,39 @@ function computeOpportunities(form) {
     autre: { items: ['objets de niche à bas prix', 'lots multi-objets', 'marques connues'], tip: 'Commence par des objets simples à tester, transporter et revendre vite.', keys: ['lot', 'débarras', 'vente rapide', 'objet marque', 'petit prix'] }
   };
   const details = map[category] || map.autre;
-  const riskCoef = risk === 'faible' ? 0.9 : risk === 'moyen' ? 1 : 1.12;
-  const timeCoef = hours <= 1 ? 0.9 : hours <= 2 ? 1 : 1.12;
-  const categoryCoef = category === 'téléphone' ? 1.08 : category === 'meuble' ? 0.95 : 1;
-  const rawMax = Math.max(5, (budget - minMargin) * 0.85 * riskCoef * timeCoef * categoryCoef);
-  const max = Math.min(budget, Math.round(rawMax / 5) * 5);
-  const targetHigh = Math.max(5, Math.round((max * 0.83) / 5) * 5);
-  const low = Math.max(5, Math.round((targetHigh * 0.5) / 5) * 5);
+  const round2 = (value) => Math.round(value * 100) / 100;
+  const clampBudget = (value) => round2(Math.min(budget, Math.max(0, value)));
+
+  let low;
+  let targetHigh;
+  let max;
+
+  if (category === 'outil') {
+    low = clampBudget(Math.max(5, budget * 0.20));
+    targetHigh = clampBudget(Math.max(low, Math.min(budget * 0.50, budget - minMargin)));
+    max = clampBudget(Math.max(targetHigh, Math.min(budget * 0.60, budget - minMargin)));
+  } else {
+    const riskCoef = risk === 'faible' ? 0.9 : risk === 'moyen' ? 1 : 1.12;
+    const timeCoef = hours <= 1 ? 0.9 : hours <= 2 ? 1 : 1.12;
+    const categoryCoef = category === 'téléphone' ? 1.08 : category === 'meuble' ? 0.95 : 1;
+    const rawMax = Math.max(5, (budget - minMargin) * 0.85 * riskCoef * timeCoef * categoryCoef);
+    max = clampBudget(Math.round(rawMax / 5) * 5);
+    targetHigh = clampBudget(Math.max(5, Math.round((max * 0.83) / 5) * 5));
+    low = clampBudget(Math.max(5, Math.round((targetHigh * 0.5) / 5) * 5));
+  }
+
+  const dangerSignalsByCategory = {
+    outil: ['pas de test possible', 'batterie absente', 'chargeur manquant', 'outil cassé ou bruyant', 'marque inconnue', 'prix proche du prix de revente', 'photos floues ou non réelles'],
+    téléphone: ['téléphone bloqué', 'iCloud/Google lock', 'IMEI douteux', 'batterie faible', 'écran fissuré', 'facture absente'],
+    meuble: ['trop encombrant', 'transport compliqué', 'dimensions absentes', 'tissu taché', 'bois gonflé ou cassé']
+  };
+  const dangerSignals = dangerSignalsByCategory[category] || ['pas de test possible', 'objet cassé', 'prix proche du prix de revente', 'aucune photo réelle', 'vendeur flou'];
+
+  const planByCategory = {
+    outil: `Cherche 10 annonces. Garde celles sous ${money(targetHigh)}. Priorité aux outils avec batterie/chargeur inclus. Demande une vidéo ou teste sur place avant achat.`
+  };
+  const plan = planByCategory[category] || `Cherche 10 annonces. Garde celles où tu peux acheter sous ${money(targetHigh)}. Contacte vite les vendeurs et teste l’objet avant achat.`;
+
   return {
     items: details.items,
     categoryTip: details.tip,
@@ -801,8 +827,8 @@ function computeOpportunities(form) {
     },
     priceRange: { low, targetHigh, max },
     positiveSignals: ['prix bas', 'annonce mal écrite mais objet intéressant', 'lot', 'vendeur pressé', 'accessoires inclus', 'photos réelles', 'marque connue'],
-    dangerSignals: ['pas de test possible', 'objet cassé', 'prix proche du prix de revente', 'trop encombrant', 'téléphone bloqué', 'aucune photo réelle', 'vendeur flou'],
-    plan: `Cherche 10 annonces. Garde celles où tu peux acheter sous ${money(targetHigh)}. Contacte vite les vendeurs et teste l’objet avant achat.`
+    dangerSignals,
+    plan
   };
 }
 
