@@ -367,34 +367,50 @@ function SellMode({ onBack }) {
       {aiSuggestion && (
         <article className="ai-suggestion">
           <h4>Suggestion IA</h4>
-          <p><strong>Objet détecté :</strong> {aiSuggestion.objectName}</p>
-          <p><strong>Catégorie proposée :</strong> {aiSuggestion.category}</p>
-          <p><strong>État apparent :</strong> {aiSuggestion.condition}</p>
-          <p><strong>Mots-clés :</strong> {Array.isArray(aiSuggestion.keywords) ? aiSuggestion.keywords.join(', ') : ''}</p>
-          <p><strong>Description proposée :</strong> {aiSuggestion.description}</p>
-          <p><strong>Titre court :</strong> {aiSuggestion.shortTitle || '—'}</p>
-          <p><strong>Titre vendeur :</strong> {aiSuggestion.sellingTitle || '—'}</p>
-          <p><strong>Description courte :</strong> {aiSuggestion.shortDescription || '—'}</p>
-          <p><strong>Description détaillée :</strong> {aiSuggestion.detailedDescription || '—'}</p>
-          <p className="field-hint">Tu peux choisir une version courte ou plus vendeuse avant de générer l’annonce.</p>
-          {(aiSuggestion.shortTitle || aiSuggestion.sellingTitle) && <div className="choice-group">
-            <p><strong>Choisir le titre à utiliser</strong></p>
-            <div className="choice-options">
-              {aiSuggestion.shortTitle && <button type="button" className={`choice-option ${selectedTitleType === 'short' ? 'selected' : ''}`} onClick={() => setSelectedTitleType('short')}>Titre court</button>}
-              {aiSuggestion.sellingTitle && <button type="button" className={`choice-option ${selectedTitleType === 'selling' ? 'selected' : ''}`} onClick={() => setSelectedTitleType('selling')}>Titre vendeur</button>}
+
+          <section className="ai-section ai-summary">
+            <p className="ai-section-title"><strong>Résumé IA</strong></p>
+            <p><strong>Objet détecté :</strong> {aiSuggestion.objectName}</p>
+            <p><strong>Catégorie proposée :</strong> {aiSuggestion.category}</p>
+            <p><strong>État apparent :</strong> {aiSuggestion.condition}</p>
+            <p><strong>Confiance :</strong> {aiSuggestion.confidence}</p>
+          </section>
+
+          <section className="ai-section ai-choices">
+            <p className="ai-section-title"><strong>Choix de l’annonce</strong></p>
+            <p className="field-hint">Tu peux choisir une version courte ou plus vendeuse avant de générer l’annonce.</p>
+            {(aiSuggestion.shortTitle || aiSuggestion.sellingTitle) && <div className="choice-group">
+              <p><strong>Choisir le titre à utiliser</strong></p>
+              <div className="choice-options">
+                {aiSuggestion.shortTitle && <button type="button" className={`choice-option ${selectedTitleType === 'short' ? 'selected' : ''}`} onClick={() => setSelectedTitleType('short')}>Titre court</button>}
+                {aiSuggestion.sellingTitle && <button type="button" className={`choice-option ${selectedTitleType === 'selling' ? 'selected' : ''}`} onClick={() => setSelectedTitleType('selling')}>Titre vendeur</button>}
+              </div>
+            </div>}
+            {(aiSuggestion.shortDescription || aiSuggestion.detailedDescription || aiSuggestion.description) && <div className="choice-group">
+              <p><strong>Choisir la description à utiliser</strong></p>
+              <div className="choice-options">
+                {aiSuggestion.shortDescription && <button type="button" className={`choice-option ${selectedDescriptionType === 'short' ? 'selected' : ''}`} onClick={() => setSelectedDescriptionType('short')}>Description courte</button>}
+                {(aiSuggestion.detailedDescription || aiSuggestion.description) && <button type="button" className={`choice-option ${selectedDescriptionType === 'detailed' ? 'selected' : ''}`} onClick={() => setSelectedDescriptionType('detailed')}>Description détaillée</button>}
+              </div>
+            </div>}
+          </section>
+
+          <details className="ai-section ai-details">
+            <summary><strong>Voir les détails IA</strong></summary>
+            <div className="ai-details-content">
+              <p className="ai-section-title"><strong>Détails IA</strong></p>
+              <p><strong>Mots-clés :</strong> {Array.isArray(aiSuggestion.keywords) ? aiSuggestion.keywords.join(', ') : ''}</p>
+              <p><strong>Description proposée :</strong> {aiSuggestion.description}</p>
+              <p><strong>Titre court :</strong> {aiSuggestion.shortTitle || '—'}</p>
+              <p><strong>Titre vendeur :</strong> {aiSuggestion.sellingTitle || '—'}</p>
+              <p><strong>Description courte :</strong> {aiSuggestion.shortDescription || '—'}</p>
+              <p><strong>Description détaillée :</strong> {aiSuggestion.detailedDescription || '—'}</p>
+              <div><strong>Conseils photo :</strong>{Array.isArray(aiSuggestion.photoTips) && aiSuggestion.photoTips.length > 0 ? <ul>{aiSuggestion.photoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul> : <span> —</span>}</div>
+              <p><strong>Conseil de mise en vente :</strong> {aiSuggestion.sellingAdvice || '—'}</p>
+              <p><strong>Avertissement :</strong> {aiSuggestion.warning}</p>
             </div>
-          </div>}
-          {(aiSuggestion.shortDescription || aiSuggestion.detailedDescription || aiSuggestion.description) && <div className="choice-group">
-            <p><strong>Choisir la description à utiliser</strong></p>
-            <div className="choice-options">
-              {aiSuggestion.shortDescription && <button type="button" className={`choice-option ${selectedDescriptionType === 'short' ? 'selected' : ''}`} onClick={() => setSelectedDescriptionType('short')}>Description courte</button>}
-              {(aiSuggestion.detailedDescription || aiSuggestion.description) && <button type="button" className={`choice-option ${selectedDescriptionType === 'detailed' ? 'selected' : ''}`} onClick={() => setSelectedDescriptionType('detailed')}>Description détaillée</button>}
-            </div>
-          </div>}
-          <div><strong>Conseils photo :</strong>{Array.isArray(aiSuggestion.photoTips) && aiSuggestion.photoTips.length > 0 ? <ul>{aiSuggestion.photoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul> : <span> —</span>}</div>
-          <p><strong>Conseil de mise en vente :</strong> {aiSuggestion.sellingAdvice || '—'}</p>
-          <p><strong>Confiance :</strong> {aiSuggestion.confidence}</p>
-          <p><strong>Avertissement :</strong> {aiSuggestion.warning}</p>
+          </details>
+
           <button type="button" onClick={useSuggestions}>Utiliser ces suggestions</button>
         </article>
       )}
