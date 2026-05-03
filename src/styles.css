@@ -30,3 +30,7 @@
 .ai-advice-block{margin:0 0 10px}
 .ai-advice-block:last-child{margin-bottom:0}
 .ai-advice-subtitle{margin:0 0 6px;font-weight:700;color:#1e293b}
+.history-list{display:grid;gap:10px;margin-top:12px}
+.history-card{padding:12px;border:1px solid #dbe3ef;border-radius:12px;background:#f8fafc}
+.history-card p{margin:0 0 6px}
+.history-tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#e2e8f0;font-weight:700}
