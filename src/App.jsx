@@ -13,6 +13,10 @@ const categoryResaleMultiplier = { bijoux: 1.25, meuble: 1.2, 'électroménager'
 const flipResaleFloorByCategory = { outil: 35, 'électroménager': 45, sport: 35, téléphone: 80, meuble: 40, bijoux: 25, vêtement: 15, déco: 20, jouet: 20, 'pièce auto': 40, autre: 25 };
 const flipResaleFloorConditionMultiplier = { neuf: 1.2, 'très bon': 1, bon: 0.85, correct: 0.65, abîmé: 0.4 };
 const lotCategories = new Set(['bijoux', 'vêtement', 'jouet', 'déco']);
+const lotFriendlyCategories = new Set(['bijoux', 'vêtement', 'jouet', 'déco']);
+const lotNameHints = ['lot', 'ensemble', 'paire', 'plusieurs', 'accessoire', 'accessoires'];
+const singleDecorKeywords = ['lampe', 'miroir', 'cadre', 'vase', 'table', 'chaise'];
+const lowRiskBuyCategories = new Set(['outil', 'jouet', 'déco', 'sport', 'vêtement', 'bijoux']);
 
 const money = (n) => `${(Number.isFinite(n) ? n : 0).toFixed(2)} $`;
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));
@@ -103,7 +107,7 @@ function getSellDecisionSummary(data) {
 function getFlipDecisionSummary(data, category) {
   const hasStrongLocalCompetition = data.localCompetitionLevel === 'forte';
   const isPhone = category === 'téléphone';
-  if (data.decision === 'ACHÈTE') return { todo: 'Tu peux acheter si l’état est confirmé.', why: `Marge nette estimée suffisante : ${cleanPrice(data.net)}.`, action: isPhone ? 'Vérifie IMEI, iCloud, batterie, facture, opérateur et écran.' : 'Vérifie l’état, les accessoires et récupère rapidement.' };
+  if (data.decision === 'ACHÈTE') return { todo: 'Tu peux acheter si l’état est confirmé.', why: data.ask <= 15 ? 'Prix demandé bas et marge nette positive.' : `Marge nette estimée suffisante : ${cleanPrice(data.net)}.`, action: isPhone ? 'Vérifie IMEI, iCloud, batterie, facture, opérateur et écran.' : 'Vérifie l’état, les accessoires et récupère rapidement.' };
   if (data.decision === 'NÉGOCIE') return { todo: `Négocie autour de ${cleanPrice(Number.isFinite(data.suggestedOffer) ? data.suggestedOffer : 0)}.`, why: hasStrongLocalCompetition ? 'La marge est limite au prix actuel. Concurrence locale forte.' : 'La marge est limite au prix actuel.', action: isPhone ? 'Vérifie IMEI, iCloud, batterie, facture, opérateur et écran.' : hasStrongLocalCompetition ? 'Négocie plus bas ou cherche une annonce moins concurrencée.' : 'Envoie le message de négociation et n’achète pas au prix affiché.' };
   return { todo: 'Évite ce deal.', why: 'Marge nette insuffisante ou risque trop élevé.', action: 'Passe à une autre annonce, sauf très forte baisse du vendeur.' };
 }
@@ -527,6 +531,17 @@ function FlipMode({ onBack }) {
 const Header = ({ title, onBack }) => <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>{title}</h2></div>;
 const FormField = ({ label, hint, children, error, invalid }) => <label className={invalid ? 'field-error' : ''}>{label}{hint && <span className="field-hint">{hint}</span>}{children}{error && <span className="field-error-text">{error}</span>}</label>;
 
+
+function isLotFriendlySellContext(category, itemName = '') {
+  const normalizedName = safeText(itemName).toLowerCase();
+  const hasLotHint = lotNameHints.some((hint) => normalizedName.includes(hint));
+  const isSingleDecor = category === 'déco' && singleDecorKeywords.some((keyword) => normalizedName.includes(keyword));
+  if (hasLotHint) return true;
+  if (!lotFriendlyCategories.has(category)) return false;
+  if (isSingleDecor) return false;
+  return true;
+}
+
 function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle = '', aiPhotoTips = [], aiSellingAdvice = '', aiWarning = '') {
   const base = Number(form.value) || 0;
   const coef = conditionCoef[form.condition];
@@ -538,6 +553,7 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
   let quick = advised * 0.8;
   let high = advised * 1.25;
   const ease = easeByCategory[form.category];
+  const isLotFriendly = isLotFriendlySellContext(form.category, form.name);
 
   let score = 50 + (coef * 35) + easeScore[ease];
   let marketRecommendation = 'Concurrence non renseignée : utilise les prix proposés et ajuste selon les retours.';
@@ -545,10 +561,10 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
   if (form.objective === 'vendre vite') score += 3;
   if (form.objective === 'vendre au meilleur prix') score -= 2;
 
-  const crowdedCategoryPenalty = lotCategories.has(form.category) ? 10 : 0;
+  const crowdedCategoryPenalty = isLotFriendly ? 10 : 0;
   score -= crowdedCategoryPenalty;
 
-  if (form.objective === 'vendre vite' && lotCategories.has(form.category)) score -= 3;
+  if (form.objective === 'vendre vite' && isLotFriendly) score -= 3;
 
   let localCompetitionLevel = 'non renseignée';
   if (Number.isFinite(localCount)) {
@@ -562,7 +578,7 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
     } else {
       localCompetitionLevel = 'forte';
       score -= 6;
-      marketRecommendation = lotCategories.has(form.category)
+      marketRecommendation = isLotFriendly
         ? 'Concurrence forte : prix attractif, bonnes photos et vente en lot recommandés.'
         : 'Concurrence forte : prix attractif, bonnes photos et titre plus précis recommandés.';
     }
@@ -584,7 +600,7 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
         ? Math.min(Math.max(advised * 1.2, localAvg * 1.1), localHigh)
         : Math.min(Math.max(advised, localAvg * 1.05), localAvg * 1.15);
       score -= 6;
-      marketRecommendation = lotCategories.has(form.category)
+      marketRecommendation = isLotFriendly
         ? 'Concurrence forte : vise un prix proche du marché, ajoute de bonnes photos ou propose un lot pour te démarquer.'
         : 'Concurrence forte : garde un prix proche du marché pour vendre plus vite.';
     } else if (ratioToLocalAvg >= 1.25) {
@@ -625,7 +641,7 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
 
   let decision = 'PRIX CORRECT';
   if (form.objective === 'vendre vite') {
-    if (lotCategories.has(form.category)) {
+    if (isLotFriendly) {
       decision = score >= 50 ? 'VENDS EN LOT' : 'BAISSE LE PRIX';
     } else {
       decision = score >= 60 ? 'VENDS VITE' : 'BAISSE LE PRIX';
@@ -635,16 +651,18 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
   } else if (score >= 75) {
     decision = 'PRIX CORRECT';
   } else if (score >= 55) {
-    decision = lotCategories.has(form.category) ? 'VENDS EN LOT' : 'VENDS VITE';
+    decision = isLotFriendly ? 'VENDS EN LOT' : 'VENDS VITE';
   } else {
     decision = 'BAISSE LE PRIX';
   }
 
-  const strategy = lotCategories.has(form.category)
+  const strategy = isLotFriendly
     ? 'Vends en lot de 3 ou 4 pour augmenter la valeur perçue et accélérer la vente.'
-    : form.objective === 'vendre au meilleur prix'
-      ? 'Commence au prix haut pendant 5 jours puis baisse si personne ne répond.'
-      : 'Prix trop ambitieux, vise la vente rapide.';
+    : form.objective === 'vendre vite'
+      ? 'Mets un prix attractif et ajoute des photos nettes de l’objet sous plusieurs angles.'
+      : form.objective === 'vendre au meilleur prix'
+        ? 'Commence au prix haut pendant 5 jours puis baisse si personne ne répond.'
+        : 'Prix trop ambitieux, vise la vente rapide.';
 
   const scoreHint = score >= 75
     ? (decision === 'VENDS EN LOT' ? 'Bon potentiel, mais la vente en lot est recommandée.' : 'Bon potentiel de vente si l’annonce est claire et bien illustrée.')
@@ -656,7 +674,9 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
   const normalizedSellingAdvice = (aiSellingAdvice || '').trim() || defaultSellingAdviceByCategory[form.category] || defaultSellingAdviceByCategory.autre;
   const baseTitle = safeText(aiSellingTitle, safeText(form.name, 'Objet'));
   const title = safeText(`${baseTitle} - ${safeText(form.condition, 'bon')} - disponible à ${cityLabel}`, 'Objet disponible');
-  const addLot = lotCategories.has(form.category) ? ' Possibilité de faire un prix pour un lot.' : '';
+  const normalizedName = safeText(form.name).toLowerCase();
+  const hasLotHintInName = lotNameHints.some((hint) => normalizedName.includes(hint));
+  const addLot = (decision === 'VENDS EN LOT' && isLotFriendly) || hasLotHintInName ? ' Possibilité de faire un prix pour un lot.' : '';
   const photoSentence = hasPhoto ? ' Photos disponibles dans l’annonce.' : '';
   const aiDescriptionSentence = safeText(aiDescription) ? ` ${cleanMarketplaceDescription(aiDescription)}` : ` Idéal pour la catégorie ${safeText(form.category, 'autre')}.`;
   const description = safeText(`Je vends ${safeText(form.name, 'cet objet')}, en état ${safeText(form.condition, 'bon')}.${aiDescriptionSentence} Disponible à ${cityLabel}.${photoSentence} Prix raisonnable. Possibilité de venir voir sur place.${addLot}`, 'Annonce indisponible');
@@ -728,6 +748,19 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
   else {localInsights.push('Prix demandé inférieur au marché local : bon potentiel si l’état est confirmé.');}
  }
  if(decision==='LAISSE TOMBER' && net<0 && resale>0){score=clamp(Math.max(score,15),10,20);}
+ const qualifiesLowPriceAutoBuy = !isPhone
+  && lowRiskBuyCategories.has(form.category)
+  && risk==='faible'
+  && ease==='bon'
+  && ask<=15
+  && minMargin>0
+  && net>=minMargin*0.7
+  && net>0;
+ if(qualifiesLowPriceAutoBuy){
+  decision='ACHÈTE';
+  score=clamp(Math.max(score,74),74,92);
+  strategy='Prix demandé bas et marge nette positive. Vérifie l’état, les accessoires et récupère rapidement.';
+ }
  if(decision!=='LAISSE TOMBER' && net<=0) decision='LAISSE TOMBER';
  if(decision==='ACHÈTE' && score<70) decision='NÉGOCIE';
  if(score<45 && decision==='ACHÈTE') decision='NÉGOCIE';
@@ -740,7 +773,7 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
  const negotiationMessage = decision==='LAISSE TOMBER'
   ? 'Non rentable'
   : decision==='ACHÈTE'
-    ? `Bonjour, votre annonce pour ${form.name || "nom de l’objet"} m’intéresse. Est-ce qu’elle est toujours disponible ? Si l’état est bien conforme à l’annonce, je peux venir le chercher rapidement.`
+    ? 'Bonjour, votre annonce m’intéresse. Est-ce que l’objet est toujours disponible ? Si l’état est conforme, je peux venir le chercher rapidement.'
     : `Bonjour, votre annonce m’intéresse. Est-ce que vous accepteriez ${suggestedOffer} $ si je viens le chercher rapidement ?`;
  const maxBuyAdvice=!hasUsableMaxBuy
   ? 'Ce deal n’est pas rentable au prix actuel. Ne négocie que si le vendeur accepte un prix très bas.'
