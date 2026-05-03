@@ -1099,6 +1099,14 @@ function escapeCsvValue(value) {
   return `"${escaped}"`;
 }
 
+function formatScoreForCsv(scoreValue) {
+  const numericScore = Number(scoreValue);
+  if (!Number.isFinite(numericScore)) return '';
+  const roundedScore = Math.round(numericScore * 10) / 10;
+  const formattedScore = Number.isInteger(roundedScore) ? String(roundedScore) : roundedScore.toFixed(1);
+  return `${formattedScore}/100`;
+}
+
 function buildHistoryCsv(entries) {
   const headers = ['date', 'mode', 'objet', 'categorie', 'etat', 'ville', 'decision', 'score', 'prix_conseille', 'prix_demande', 'prix_revente_probable', 'marge_nette', 'prix_max_conseille', 'risque', 'photo_utilisee'];
   const rows = entries.map((entry) => {
@@ -1111,7 +1119,7 @@ function buildHistoryCsv(entries) {
       safeText(details.État, ''),
       safeText(details.Ville, ''),
       safeText(entry.decision, safeText(details.Décision, '')),
-      safeText(details.Score, ''),
+      formatScoreForCsv(details.Score),
       safeText(details['Prix conseillé'], ''),
       safeText(details['Prix demandé'], ''),
       safeText(details['Prix revente probable'], ''),
