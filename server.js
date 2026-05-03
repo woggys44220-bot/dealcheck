@@ -38,6 +38,7 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
   const fileSize = req.file?.size || 0;
   const hasApiKey = Boolean(process.env.OPENAI_API_KEY);
   const model = 'gpt-4.1-mini';
+  const imageType = req.body?.imageType === 'marketplace_screenshot' ? 'marketplace_screenshot' : 'object_photo';
   console.log('Analyse photo: fichier reçu =', hasFile);
   console.log('Analyse photo: type MIME =', mimeType);
   console.log('Analyse photo: taille fichier (octets) =', fileSize);
@@ -64,7 +65,9 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
           content: [
             {
               type: 'input_text',
-              text: `Analyse cette photo d'objet. Retourne uniquement un JSON strict avec: objectName, category, condition, keywords, description, confidence, warning, shortTitle, sellingTitle, shortDescription, detailedDescription, photoTips, sellingAdvice, risksToCheck, questionsToAsk, accessoriesToCheck.\nCatégories autorisées: ${allowedCategories.join(', ')}.\nÉtats autorisés: ${allowedConditions.join(', ')}.\nConfiance autorisée: ${allowedConfidence.join(', ')}.\nRègles: si incertain catégorie=autre et confidence=faible; ne pas inventer marque; ne jamais affirmer neuf uniquement depuis photo; état apparent uniquement; warning doit toujours rappeler confirmation manuelle; ne pas inventer de détail non visible; shortDescription et detailedDescription doivent être prêtes à publier sur Marketplace, naturelles, simples et vendeuses; ne pas inclure dans shortDescription, detailedDescription ni description de mentions d'avertissement, juridiques ou de doute (ex: "vérifiez", "confirmez", "je ne garantis pas", "sous réserve", "authenticité", "matériaux à confirmer"), sauf nécessité absolue pour objet de luxe/de marque; mettre les prudences et avertissements uniquement dans warning et/ou sellingAdvice; photoTips doit être un tableau de 0 à 5 conseils utiles; sellingAdvice doit rester prudent et réaliste; risksToCheck, questionsToAsk et accessoriesToCheck doivent être des tableaux courts et pratiques; éviter un ton juridique; garder un style simple, vendeur et naturel.`
+              text: imageType === 'marketplace_screenshot'
+                ? `Analyse cette capture d’annonce Marketplace/Kijiji/Vinted/Leboncoin. Lis UNIQUEMENT ce qui est visible. Retourne uniquement un JSON strict avec: imageType, objectName, detectedPrice, detectedCity, category, condition, brandOrModel, visibleListingTitle, visibleDescription, keywords, risksToCheck, questionsToAsk, accessoriesToCheck, confidence, warning, description.\nimageType doit être marketplace_screenshot.\nCatégories autorisées: ${allowedCategories.join(', ')}.\nÉtats autorisés: ${allowedConditions.join(', ')}.\nConfiance autorisée: ${allowedConfidence.join(', ')}.\nRègles critiques: n’invente jamais prix/ville/marque non lisibles (mettre null ou chaîne vide), n’invente pas une description non visible, si texte flou ou partiel confidence=faible ou moyenne, indique clairement ce qui est visible, warning doit rappeler la vérification manuelle avant achat, risquesToCheck/questionsToAsk/accessoriesToCheck en tableaux courts et utiles.`
+                : `Analyse cette photo d'objet. Retourne uniquement un JSON strict avec: objectName, category, condition, keywords, description, confidence, warning, shortTitle, sellingTitle, shortDescription, detailedDescription, photoTips, sellingAdvice, risksToCheck, questionsToAsk, accessoriesToCheck.\nCatégories autorisées: ${allowedCategories.join(', ')}.\nÉtats autorisés: ${allowedConditions.join(', ')}.\nConfiance autorisée: ${allowedConfidence.join(', ')}.\nRègles: si incertain catégorie=autre et confidence=faible; ne pas inventer marque; ne jamais affirmer neuf uniquement depuis photo; état apparent uniquement; warning doit toujours rappeler confirmation manuelle; ne pas inventer de détail non visible; shortDescription et detailedDescription doivent être prêtes à publier sur Marketplace, naturelles, simples et vendeuses; ne pas inclure dans shortDescription, detailedDescription ni description de mentions d'avertissement, juridiques ou de doute (ex: "vérifiez", "confirmez", "je ne garantis pas", "sous réserve", "authenticité", "matériaux à confirmer"), sauf nécessité absolue pour objet de luxe/de marque; mettre les prudences et avertissements uniquement dans warning et/ou sellingAdvice; photoTips doit être un tableau de 0 à 5 conseils utiles; sellingAdvice doit rester prudent et réaliste; risksToCheck, questionsToAsk et accessoriesToCheck doivent être des tableaux courts et pratiques; éviter un ton juridique; garder un style simple, vendeur et naturel.`
             },
             { type: 'input_image', image_url: dataUrl }
           ]
@@ -106,6 +109,12 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
       questionsToAsk: Array.isArray(parsed.questionsToAsk) ? parsed.questionsToAsk.slice(0, 6).map((v) => String(v)) : [],
       accessoriesToCheck: Array.isArray(parsed.accessoriesToCheck) ? parsed.accessoriesToCheck.slice(0, 6).map((v) => String(v)) : []
     };
+    safe.imageType = imageType;
+    safe.detectedPrice = Number.isFinite(Number(parsed.detectedPrice)) ? Number(parsed.detectedPrice) : null;
+    safe.detectedCity = typeof parsed.detectedCity === 'string' ? parsed.detectedCity.trim() : '';
+    safe.brandOrModel = typeof parsed.brandOrModel === 'string' ? parsed.brandOrModel.trim() : '';
+    safe.visibleListingTitle = typeof parsed.visibleListingTitle === 'string' ? parsed.visibleListingTitle.trim() : '';
+    safe.visibleDescription = typeof parsed.visibleDescription === 'string' ? parsed.visibleDescription.trim() : '';
 
     if (!safe.warning.toLowerCase().includes('manuell')) {
       safe.warning = `${safe.warning} L’état exact doit être confirmé manuellement.`.trim();
