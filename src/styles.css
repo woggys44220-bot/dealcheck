@@ -35,3 +35,13 @@
 .history-card p{margin:0 0 6px}
 .history-tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#e2e8f0;font-weight:700}
 .history-actions button:disabled{opacity:.55;cursor:not-allowed}
+
+.guided-journey{margin:8px 0 12px;padding:12px;border:1px solid #dbe3ef;border-radius:14px;background:#f8fafc;display:grid;gap:8px}
+.guided-journey h3{margin:0;font-size:1rem}
+.guided-step{padding:8px 10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}
+.guided-step-title{margin:0;font-weight:700;display:flex;align-items:center;gap:8px;line-height:1.3}
+.guided-step ul{margin:6px 0 0;padding-left:18px;color:#334155}
+.guided-step li{margin:0 0 4px;line-height:1.35}
+.guided-step li:last-child{margin-bottom:0}
+.guided-next{margin:0;padding:8px 10px;border-radius:10px;background:#eaf2ff;color:#1e3a8a;line-height:1.35}
+.guided-status{display:inline-flex;min-width:20px;justify-content:center}
