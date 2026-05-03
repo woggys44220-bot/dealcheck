@@ -1013,12 +1013,35 @@ const Score = ({ score, tone: forcedTone }) => {
 export default App;
 function HistoryMode({ entries, onBack, onDelete, onClear }) {
   const [selected, setSelected] = useState(null);
+  const [exportMessage, setExportMessage] = useState('');
+  const hasEntries = entries.length > 0;
   const clearAll = () => { if (window.confirm('Supprimer tout l’historique ?')) onClear(); };
+  const handleExportCsv = () => {
+    if (!hasEntries) {
+      setExportMessage('Historique vide : rien à exporter.');
+      return;
+    }
+    const csvContent = buildHistoryCsv(entries);
+    downloadFile('dealcheck_historique.csv', `\uFEFF${csvContent}`, 'text/csv;charset=utf-8;');
+    setExportMessage('Export CSV généré');
+  };
+  const handleExportJson = () => {
+    if (!hasEntries) {
+      setExportMessage('Historique vide : rien à exporter.');
+      return;
+    }
+    const safeHistory = entries.map((entry) => sanitizeHistoryForExport(entry));
+    downloadFile('dealcheck_historique.json', JSON.stringify(safeHistory, null, 2), 'application/json;charset=utf-8;');
+    setExportMessage('Export JSON généré');
+  };
   return <div>
     <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>Historique</h2></div>
-    <div className="actions">
+    <div className="actions history-actions">
+      <button className="secondary" onClick={handleExportCsv} disabled={!hasEntries}>Exporter CSV</button>
+      <button className="secondary" onClick={handleExportJson} disabled={!hasEntries}>Exporter JSON</button>
       <button className="secondary" onClick={clearAll}>Vider l’historique</button>
     </div>
+    {exportMessage && <p className="field-hint">{exportMessage}</p>}
     {!entries.length && <p>Aucune analyse sauvegardée.</p>}
     <section className="history-list">
       {entries.map((entry) => <article key={entry.id} className="history-card">
@@ -1057,3 +1080,60 @@ function formatHistoryDate(value) { const date = new Date(value); return Number.
 function buildSellHistoryEntry(form, data, photoUsed) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'sell', modeLabel: 'Vente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Prix conseillé', keyMetricValue: safeMoney(data.advised), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'vente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix vente rapide': safeMoney(data.quick), 'Prix conseillé': safeMoney(data.advised), 'Prix haut': safeMoney(data.high), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), 'Titre final': safeText(data.title, 'N/A'), 'Description finale': safeText(data.description, 'N/A'), photoUsed: photoUsed ? 'true' : 'false' } }; }
 function buildFlipHistoryEntry(form, data) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'flip', modeLabel: 'Achat-revente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Marge nette', keyMetricValue: safeMoney(data.net), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'achat-revente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix demandé': safeMoney(form.ask), 'Prix revente probable': safeMoney(data.resale), 'Marge brute': safeMoney(data.gross), 'Marge nette': safeMoney(data.net), 'Prix négociation conseillé': safeMoney(data.suggestedOffer), Risque: safeText(data.risk, 'N/A'), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), photoUsed: 'false' } }; }
 function buildOpportunityHistoryEntry(form, data) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'opportunities', modeLabel: 'Recherche', category: safeText(form.category, 'autre'), decision: safeText(data.summary?.todo, 'N/A'), keyMetricLabel: 'Prix max conseillé', keyMetricValue: safeMoney(data.priceRange?.max), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'recherche opportunités', Catégorie: safeText(form.category, 'autre'), Ville: safeText(form.city, 'N/A'), Budget: safeMoney(form.budget), 'Marge minimum': safeMoney(form.minMargin), 'Risque accepté': safeText(form.risk, 'N/A'), 'Objets recommandés': (data.items || []).map((v) => safeText(v)).filter(Boolean).join(', '), 'Prix achat cible': `${safeMoney(data.priceRange?.low)} - ${safeMoney(data.priceRange?.max)}`, 'Plan d’action': safeText(data.plan, 'N/A'), photoUsed: 'false' } }; }
+
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsvValue(value) {
+  const normalized = safeText(value, '');
+  const escaped = normalized.replace(/"/g, '""');
+  return `"${escaped}"`;
+}
+
+function buildHistoryCsv(entries) {
+  const headers = ['date', 'mode', 'objet', 'categorie', 'etat', 'ville', 'decision', 'score', 'prix_conseille', 'prix_demande', 'prix_revente_probable', 'marge_nette', 'prix_max_conseille', 'risque', 'photo_utilisee'];
+  const rows = entries.map((entry) => {
+    const details = entry.details || {};
+    return [
+      formatHistoryDate(entry.createdAt),
+      safeText(entry.modeLabel, safeText(entry.mode, 'N/A')),
+      safeText(entry.name, safeText(details.Objet, '')),
+      safeText(entry.category, safeText(details.Catégorie, '')),
+      safeText(details.État, ''),
+      safeText(details.Ville, ''),
+      safeText(entry.decision, safeText(details.Décision, '')),
+      safeText(details.Score, ''),
+      safeText(details['Prix conseillé'], ''),
+      safeText(details['Prix demandé'], ''),
+      safeText(details['Prix revente probable'], ''),
+      safeText(details['Marge nette'], ''),
+      safeText(details['Prix max conseillé'], safeText(entry.keyMetricLabel === 'Prix max conseillé' ? entry.keyMetricValue : '', '')),
+      safeText(details.Risque, safeText(details['Risque accepté'], '')),
+      String(safeText(details.photoUsed, 'false')).toLowerCase() === 'true' ? 'oui' : 'non'
+    ].map((cell) => escapeCsvValue(cell)).join(';');
+  });
+  return [headers.join(';'), ...rows].join('\n');
+}
+
+function sanitizeHistoryForExport(value, parentKey = '') {
+  if (Array.isArray(value)) return value.map((item) => sanitizeHistoryForExport(item, parentKey));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((acc, [key, currentValue]) => {
+      const lowered = `${parentKey}.${key}`.toLowerCase();
+      if (lowered.includes('photo') || lowered.includes('image') || lowered.includes('base64') || lowered.includes('api') || lowered.includes('key')) return acc;
+      acc[key] = sanitizeHistoryForExport(currentValue, lowered);
+      return acc;
+    }, {});
+  }
+  if (value == null || Number.isNaN(value)) return '';
+  return value;
+}

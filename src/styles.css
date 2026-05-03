@@ -34,3 +34,4 @@
 .history-card{padding:12px;border:1px solid #dbe3ef;border-radius:12px;background:#f8fafc}
 .history-card p{margin:0 0 6px}
 .history-tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#e2e8f0;font-weight:700}
+.history-actions button:disabled{opacity:.55;cursor:not-allowed}
