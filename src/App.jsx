@@ -187,27 +187,57 @@ function buildSearchQueriesFromSuggestion(suggestion) {
 
 function SearchQueriesCard({ suggestion }) {
   const queries = useMemo(() => buildSearchQueriesFromSuggestion(suggestion), [suggestion]);
+  const [copiedMessage, setCopiedMessage] = useState('');
   const objectName = safeText(suggestion?.visibleListingTitle || suggestion?.objectName, 'Objet');
-  if (!queries.length || !objectName) return null;
-  const copyQueries = () => navigator.clipboard.writeText(queries.join('\n'));
-  const copyGuide = () => navigator.clipboard.writeText(`Objet détecté : ${objectName}
+  const safeQueries = queries.map((q) => safeText(q, '')).filter(Boolean);
+  if (!safeQueries.length || !objectName) return null;
+  const copyWithFallback = async (text, successMessage) => {
+    const cleanedText = safeText(text, '');
+    if (!cleanedText) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(cleanedText);
+      } else if (typeof document !== 'undefined') {
+        const textarea = document.createElement('textarea');
+        textarea.value = cleanedText;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } else return;
+      setCopiedMessage(successMessage);
+      setTimeout(() => setCopiedMessage(''), 2200);
+    } catch (_error) {
+      setCopiedMessage('Copie impossible');
+      setTimeout(() => setCopiedMessage(''), 2200);
+    }
+  };
+  const copySuggestedSearches = async () => copyWithFallback(safeQueries.join('\n'), 'Recherches copiées');
+  const copySearchGuide = async () => copyWithFallback(`Objet détecté : ${objectName}
+
 Recherches à tester :
-${queries.map((q) => `- ${q}`).join('\n')}
+${safeQueries.map((q) => `- ${q}`).join('\n')}
+
 Étapes :
 1. Ouvre Marketplace ou Kijiji.
 2. Colle une recherche.
 3. Affiche plusieurs annonces similaires.
 4. Prends une capture des résultats.
 5. Importe la capture dans Concurrence locale > Analyse automatique.
-6. Clique “Utiliser ces prix de marché”.`);
+6. Clique “Utiliser ces prix de marché”.`, 'Guide copié');
   return <article className="ai-suggestion">
     <h4>Recherches concurrence suggérées</h4>
     <p className="field-hint">{SEARCH_GUIDE_TEXT}</p>
-    <ul>{queries.map((q) => <li key={q}>{q}</li>)}</ul>
+    <ul>{safeQueries.map((q) => <li key={q}>{q}</li>)}</ul>
     <div className="actions">
-      <button type="button" className="secondary" onClick={copyQueries}>Copier les recherches</button>
-      <button type="button" className="secondary" onClick={copyGuide}>Copier le guide</button>
+      <button type="button" className="secondary" onClick={copySuggestedSearches} disabled={!safeQueries.length}>Copier les recherches</button>
+      <button type="button" className="secondary" onClick={copySearchGuide} disabled={!safeQueries.length}>Copier le guide</button>
     </div>
+    {copiedMessage && <p className="field-hint" role="status">{copiedMessage}</p>}
   </article>;
 }
 
