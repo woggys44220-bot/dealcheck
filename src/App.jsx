@@ -669,6 +669,41 @@ function FlipMode({ onBack, onSaveHistory }) {
     setHasResult(false);
   };
 
+  const handleCompetitionChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setCompetitionError('Merci d’ajouter une image valide.'); event.target.value = ''; return; }
+    const nextPreview = URL.createObjectURL(file);
+    if (competitionPreview) URL.revokeObjectURL(competitionPreview);
+    setCompetitionPreview(nextPreview); setCompetitionFile(file); setCompetitionError(''); setCompetitionResult(null); setCompetitionAutoUsed(false); setHasResult(false);
+  };
+
+  const analyzeCompetition = async () => {
+    if (!competitionFile) { setCompetitionError('Ajoute une capture de résultats avant de lancer l’analyse.'); return; }
+    setCompetitionLoading(true); setCompetitionError(''); setCompetitionResult(null); setCompetitionAutoUsed(false);
+    try {
+      const body = new FormData(); body.append('photo', competitionFile); body.append('imageType', 'market_competition_screenshot'); body.append('objectName', form.name); body.append('category', form.category);
+      const response = await fetch('/api/analyze-photo', { method: 'POST', body }); const result = await response.json(); if (!response.ok) throw new Error(`api_${response.status}`);
+      const normalized = normalizeMarketCompetition(result);
+      if (!normalized.valid) { setCompetitionError(normalized.reason); return; }
+      setCompetitionResult(normalized.normalized);
+    } catch (_error) { setCompetitionError('Impossible d’analyser la concurrence pour le moment.'); }
+    finally { setCompetitionLoading(false); }
+  };
+
+  const applyCompetitionToManualFields = () => {
+    if (!competitionResult) return;
+    setForm((prev) => ({
+      ...prev,
+      localCount: Number.isFinite(competitionResult.detectedCount) ? String(competitionResult.detectedCount) : prev.localCount,
+      localLow: Number.isFinite(competitionResult.lowestPrice) ? String(competitionResult.lowestPrice) : prev.localLow,
+      localAvg: Number.isFinite(competitionResult.averagePrice) ? String(competitionResult.averagePrice) : prev.localAvg,
+      localHigh: Number.isFinite(competitionResult.highestPrice) ? String(competitionResult.highestPrice) : prev.localHigh
+    }));
+    setCompetitionAutoUsed(true);
+    setHasResult(false);
+  };
+
   const showResult = hasResult;
   const copy = async ()=>{ if (!showResult) return; await navigator.clipboard.writeText(data.negotiationMessage); setCopied(true); setTimeout(()=>setCopied(false), 1400); };
   return <div>
