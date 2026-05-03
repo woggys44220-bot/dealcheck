@@ -36,6 +36,34 @@ const safeNumber = (value, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 const safeMoney = (value) => money(safeNumber(value, 0));
+const isFiniteMarketNumber = (value) => Number.isFinite(Number(value));
+const normalizeMarketCompetition = (result) => {
+  if (!result || result.imageType !== 'market_competition_screenshot') return { valid: false, reason: 'Type d’analyse invalide.' };
+  const low = isFiniteMarketNumber(result.lowestPrice) ? Number(result.lowestPrice) : null;
+  const avg = isFiniteMarketNumber(result.averagePrice) ? Number(result.averagePrice) : null;
+  const high = isFiniteMarketNumber(result.highestPrice) ? Number(result.highestPrice) : null;
+  const detectedCount = isFiniteMarketNumber(result.detectedCount) ? Number(result.detectedCount) : null;
+  const validPriceCount = [low, avg, high].filter((v) => Number.isFinite(v)).length;
+  if (validPriceCount < 2) return { valid: false, reason: 'Pas assez de prix lisibles pour estimer le marché.' };
+  if ((low != null && avg != null && low > avg) || (avg != null && high != null && avg > high) || (low != null && high != null && low > high)) {
+    return { valid: false, reason: 'Prix détectés incohérents. Vérifie la capture ou remplis manuellement.' };
+  }
+  return {
+    valid: true,
+    normalized: {
+      detectedCount,
+      lowestPrice: low,
+      averagePrice: avg != null ? Number(avg.toFixed(2)) : null,
+      highestPrice: high,
+      currency: safeText(result.currency, '$') || '$',
+      confidence: safeText(result.confidence, 'faible'),
+      marketComment: safeText(result.marketComment, ''),
+      items: Array.isArray(result.items) ? result.items.slice(0, 5) : [],
+      ignoredItems: Array.isArray(result.ignoredItems) ? result.ignoredItems.slice(0, 5) : [],
+      warning: safeText(result.warning, '')
+    }
+  };
+};
 const defaultSellingAdviceByCategory = {
   bijoux: 'Vends ce type de bijou en lot si tu en as plusieurs, car la valeur perçue sera meilleure.',
   vêtement: 'Ajoute des photos portées ou sur cintre, et indique la taille clairement.',
@@ -179,6 +207,12 @@ function SellMode({ onBack, onSaveHistory }) {
   const [selectedAiPhotoTips, setSelectedAiPhotoTips] = useState([]);
   const [selectedAiSellingAdvice, setSelectedAiSellingAdvice] = useState('');
   const [selectedAiWarning, setSelectedAiWarning] = useState('');
+  const [competitionPreview, setCompetitionPreview] = useState('');
+  const [competitionFile, setCompetitionFile] = useState(null);
+  const [competitionLoading, setCompetitionLoading] = useState(false);
+  const [competitionError, setCompetitionError] = useState('');
+  const [competitionResult, setCompetitionResult] = useState(null);
+  const [competitionAutoUsed, setCompetitionAutoUsed] = useState(false);
   const data = useMemo(
     () => computeSell(form, Boolean(photoPreview), selectedAiDescription, selectedAiSellingTitle, selectedAiPhotoTips, selectedAiSellingAdvice, selectedAiWarning),
     [form, photoPreview, selectedAiDescription, selectedAiSellingTitle, selectedAiPhotoTips, selectedAiSellingAdvice, selectedAiWarning]
@@ -220,7 +254,7 @@ function SellMode({ onBack, onSaveHistory }) {
   const analyzeSell = () => {
     if (!validateSellForm()) return;
     setHasResult(true);
-    onSaveHistory(buildSellHistoryEntry(form, data, Boolean(photoPreview)));
+    onSaveHistory(buildSellHistoryEntry(form, data, Boolean(photoPreview), competitionAutoUsed ? competitionResult : null));
   };
 
   const resetSellForm = () => {
@@ -238,6 +272,13 @@ function SellMode({ onBack, onSaveHistory }) {
     setSelectedAiSellingAdvice('');
     setSelectedAiWarning('');
     setAiLoading(false);
+    if (competitionPreview) URL.revokeObjectURL(competitionPreview);
+    setCompetitionPreview('');
+    setCompetitionFile(null);
+    setCompetitionLoading(false);
+    setCompetitionError('');
+    setCompetitionResult(null);
+    setCompetitionAutoUsed(false);
     setCopiedMessage('');
     setForm({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0], localCount: '', localLow: '', localAvg: '', localHigh: '' });
     setErrors({});
@@ -346,6 +387,38 @@ function SellMode({ onBack, onSaveHistory }) {
     setHasResult(false);
   };
 
+  const handleCompetitionChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setCompetitionError('Merci d’ajouter une image valide.'); event.target.value = ''; return; }
+    const nextPreview = URL.createObjectURL(file);
+    if (competitionPreview) URL.revokeObjectURL(competitionPreview);
+    setCompetitionPreview(nextPreview); setCompetitionFile(file); setCompetitionError(''); setCompetitionResult(null); setCompetitionAutoUsed(false); setHasResult(false);
+  };
+  const analyzeCompetition = async () => {
+    if (!competitionFile) { setCompetitionError('Ajoute une capture de résultats avant de lancer l’analyse.'); return; }
+    setCompetitionLoading(true); setCompetitionError(''); setCompetitionResult(null); setCompetitionAutoUsed(false);
+    try {
+      const body = new FormData(); body.append('photo', competitionFile); body.append('imageType', 'market_competition_screenshot'); body.append('objectName', form.name); body.append('category', form.category);
+      const response = await fetch('/api/analyze-photo', { method: 'POST', body }); const result = await response.json(); if (!response.ok) throw new Error(`api_${response.status}`);
+      const normalized = normalizeMarketCompetition(result);
+      if (!normalized.valid) { setCompetitionError(normalized.reason); return; }
+      setCompetitionResult(normalized.normalized);
+    } catch (_error) { setCompetitionError('Impossible d’analyser la concurrence pour le moment.'); }
+    finally { setCompetitionLoading(false); }
+  };
+  const applyCompetitionToManualFields = () => {
+    if (!competitionResult) return;
+    setForm((prev) => ({
+      ...prev,
+      localCount: Number.isFinite(competitionResult.detectedCount) ? String(competitionResult.detectedCount) : prev.localCount,
+      localLow: Number.isFinite(competitionResult.lowestPrice) ? String(competitionResult.lowestPrice) : prev.localLow,
+      localAvg: Number.isFinite(competitionResult.averagePrice) ? String(competitionResult.averagePrice) : prev.localAvg,
+      localHigh: Number.isFinite(competitionResult.highestPrice) ? String(competitionResult.highestPrice) : prev.localHigh
+    }));
+    setCompetitionAutoUsed(true);
+    setHasResult(false);
+  };
   const showResult = hasResult;
   const showPhotoTipsCopyButton = Array.isArray(data.aiPhotoTips) && data.aiPhotoTips.length > 0;
   const copyText = async (text, successMessage) => {
@@ -465,6 +538,17 @@ function SellMode({ onBack, onSaveHistory }) {
     <section>
       <h3>Concurrence locale</h3>
       <p className="field-hint">Optionnel : indique ce que tu vois sur les annonces similaires pour ajuster ton prix de vente.</p>
+      <section className="photo-ai-block">
+        <h4>Analyse automatique de concurrence</h4>
+        <p className="field-hint">Optionnel : importe une capture de résultats Marketplace/Kijiji/Vinted/Leboncoin avec plusieurs annonces similaires visibles. DealCheck estimera les prix du marché.</p>
+        <label>Importer une capture concurrence<input type="file" accept="image/jpg,image/jpeg,image/png,image/webp" onChange={handleCompetitionChange} /></label>
+        {competitionPreview && <div className="photo-preview-card"><img src={competitionPreview} alt="Aperçu capture concurrence" className="photo-preview" /></div>}
+        {!competitionLoading && <button type="button" onClick={analyzeCompetition}>Analyser la concurrence</button>}
+        {competitionLoading && <p className="photo-note">Analyse en cours…</p>}
+        {competitionError && <p className="form-error">{competitionError}</p>}
+        {competitionResult && <article className="ai-suggestion"><h4>Concurrence détectée</h4><p><strong>Nombre d’annonces similaires détectées :</strong> {competitionResult.detectedCount ?? '—'}</p><p><strong>Prix bas détecté :</strong> {competitionResult.lowestPrice != null ? `${competitionResult.lowestPrice} ${competitionResult.currency}` : '—'}</p><p><strong>Prix moyen détecté :</strong> {competitionResult.averagePrice != null ? `${competitionResult.averagePrice} ${competitionResult.currency}` : '—'}</p><p><strong>Prix haut détecté :</strong> {competitionResult.highestPrice != null ? `${competitionResult.highestPrice} ${competitionResult.currency}` : '—'}</p><p><strong>Confiance :</strong> {competitionResult.confidence || '—'}</p><p><strong>Commentaire marché :</strong> {competitionResult.marketComment || '—'}</p>{competitionResult.items.length > 0 && <div><strong>Annonces détectées :</strong><ul>{competitionResult.items.map((item, index) => <li key={`${item.title || 'item'}-${index}`}>{safeText(item.title, 'Annonce')} {item.price != null ? `- ${item.price} ${competitionResult.currency}` : ''}</li>)}</ul></div>}{competitionResult.ignoredItems.length > 0 && <div><strong>Annonces ignorées :</strong><ul>{competitionResult.ignoredItems.map((item, index) => <li key={`${item.title || 'ignored'}-${index}`}>{safeText(item.title, 'Annonce')} ({safeText(item.reason, 'non comparable')})</li>)}</ul></div>}<button type="button" onClick={applyCompetitionToManualFields}>Utiliser ces prix de marché</button></article>}
+      </section>
+
       <FormField label="Nombre d’annonces similaires" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localCount} onChange={(e)=>{updateSellField('localCount', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
       <FormField label="Prix le plus bas observé" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localLow} onChange={(e)=>{updateSellField('localLow', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
       <FormField label="Prix moyen observé" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localAvg} onChange={(e)=>{updateSellField('localAvg', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
@@ -492,6 +576,12 @@ function FlipMode({ onBack, onSaveHistory }) {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [imageType, setImageType] = useState('object_photo');
   const [flipAiChecks, setFlipAiChecks] = useState({ risksToCheck: [], questionsToAsk: [], accessoriesToCheck: [], warning: '' });
+  const [competitionPreview, setCompetitionPreview] = useState('');
+  const [competitionFile, setCompetitionFile] = useState(null);
+  const [competitionLoading, setCompetitionLoading] = useState(false);
+  const [competitionError, setCompetitionError] = useState('');
+  const [competitionResult, setCompetitionResult] = useState(null);
+  const [competitionAutoUsed, setCompetitionAutoUsed] = useState(false);
   const data = useMemo(()=>computeFlip(form), [form]);
 
   const updateFlipField = (field, value) => {
@@ -531,7 +621,7 @@ function FlipMode({ onBack, onSaveHistory }) {
   const analyzeFlip = () => {
     if (!validateFlipForm()) return;
     setHasResult(true);
-    onSaveHistory(buildFlipHistoryEntry(form, data, Boolean(photoPreview), flipAiChecks, aiSuggestion));
+    onSaveHistory(buildFlipHistoryEntry(form, data, Boolean(photoPreview), flipAiChecks, aiSuggestion, competitionAutoUsed ? competitionResult : null));
   };
 
   const handlePhotoChange = (event) => {
@@ -596,6 +686,17 @@ function FlipMode({ onBack, onSaveHistory }) {
     <section>
       <h3>Concurrence locale</h3>
       <p className="field-hint">Optionnel : indique ce que tu vois sur les annonces similaires autour de toi pour affiner le verdict.</p>
+      <section className="photo-ai-block">
+        <h4>Analyse automatique de concurrence</h4>
+        <p className="field-hint">Optionnel : importe une capture de résultats Marketplace/Kijiji/Vinted/Leboncoin avec plusieurs annonces similaires visibles. DealCheck estimera les prix du marché.</p>
+        <label>Importer une capture concurrence<input type="file" accept="image/jpg,image/jpeg,image/png,image/webp" onChange={handleCompetitionChange} /></label>
+        {competitionPreview && <div className="photo-preview-card"><img src={competitionPreview} alt="Aperçu capture concurrence" className="photo-preview" /></div>}
+        {!competitionLoading && <button type="button" onClick={analyzeCompetition}>Analyser la concurrence</button>}
+        {competitionLoading && <p className="photo-note">Analyse en cours…</p>}
+        {competitionError && <p className="form-error">{competitionError}</p>}
+        {competitionResult && <article className="ai-suggestion"><h4>Concurrence détectée</h4><p><strong>Nombre d’annonces similaires détectées :</strong> {competitionResult.detectedCount ?? '—'}</p><p><strong>Prix bas détecté :</strong> {competitionResult.lowestPrice != null ? `${competitionResult.lowestPrice} ${competitionResult.currency}` : '—'}</p><p><strong>Prix moyen détecté :</strong> {competitionResult.averagePrice != null ? `${competitionResult.averagePrice} ${competitionResult.currency}` : '—'}</p><p><strong>Prix haut détecté :</strong> {competitionResult.highestPrice != null ? `${competitionResult.highestPrice} ${competitionResult.currency}` : '—'}</p><p><strong>Confiance :</strong> {competitionResult.confidence || '—'}</p><p><strong>Commentaire marché :</strong> {competitionResult.marketComment || '—'}</p><button type="button" onClick={applyCompetitionToManualFields}>Utiliser ces prix de marché</button></article>}
+      </section>
+
       <FormField label="Nombre d’annonces similaires" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localCount} onChange={(e)=>{updateFlipField('localCount', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
       <FormField label="Prix le plus bas constaté" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localLow} onChange={(e)=>{updateFlipField('localLow', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
       <FormField label="Prix moyen constaté" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localAvg} onChange={(e)=>{updateFlipField('localAvg', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
@@ -605,7 +706,7 @@ function FlipMode({ onBack, onSaveHistory }) {
     {errors.amounts && <p className="form-error">{errors.amounts}</p>}
     {Object.keys(errors).some((key) => key !== 'amounts') && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeFlip}>Analyser le deal</button></div>
-    {showResult && <FlipResult data={data} category={form.category} aiChecks={flipAiChecks} actions={{ copy, reset: ()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' }); setErrors({}); setHasResult(false); if (photoPreview) URL.revokeObjectURL(photoPreview); setPhotoPreview(''); setPhotoFile(null); setPhotoError(''); setAiError(''); setAiSuggestion(null); setAiLoading(false); setImageType('object_photo'); setFlipAiChecks({ risksToCheck: [], questionsToAsk: [], accessoriesToCheck: [], warning: '' });} }} />}
+    {showResult && <FlipResult data={data} category={form.category} aiChecks={flipAiChecks} actions={{ copy, reset: ()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' }); setErrors({}); setHasResult(false); if (photoPreview) URL.revokeObjectURL(photoPreview); setPhotoPreview(''); setPhotoFile(null); setPhotoError(''); setAiError(''); setAiSuggestion(null); setAiLoading(false); setImageType('object_photo'); setFlipAiChecks({ risksToCheck: [], questionsToAsk: [], accessoriesToCheck: [], warning: '' }); if (competitionPreview) URL.revokeObjectURL(competitionPreview); setCompetitionPreview(''); setCompetitionFile(null); setCompetitionLoading(false); setCompetitionError(''); setCompetitionResult(null); setCompetitionAutoUsed(false);} }} />}
     {copied && <p className="copied">Message copié ✅</p>}
   </div>;
 }
@@ -1132,8 +1233,8 @@ function loadHistory() { try { const parsed = JSON.parse(localStorage.getItem(HI
 function saveHistory(entries) { localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(0, HISTORY_LIMIT))); }
 function createHistoryId() { return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
 function formatHistoryDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Date inconnue' : date.toLocaleString('fr-CA'); }
-function buildSellHistoryEntry(form, data, photoUsed) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'sell', modeLabel: 'Vente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Prix conseillé', keyMetricValue: safeMoney(data.advised), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'vente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix vente rapide': safeMoney(data.quick), 'Prix conseillé': safeMoney(data.advised), 'Prix haut': safeMoney(data.high), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), 'Titre final': safeText(data.title, 'N/A'), 'Description finale': safeText(data.description, 'N/A'), photoUsed: photoUsed ? 'true' : 'false' } }; }
-function buildFlipHistoryEntry(form, data, photoUsed = false, aiChecks = {}, aiSuggestion = null) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'flip', modeLabel: 'Achat-revente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Marge nette', keyMetricValue: safeMoney(data.net), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'achat-revente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix demandé': safeMoney(form.ask), 'Prix revente probable': safeMoney(data.resale), 'Marge brute': safeMoney(data.gross), 'Marge nette': safeMoney(data.net), 'Prix négociation conseillé': safeMoney(data.suggestedOffer), Risque: safeText(data.risk, 'N/A'), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), 'Risques IA': Array.isArray(aiChecks.risksToCheck) ? aiChecks.risksToCheck.join(', ') : '', 'Questions IA vendeur': Array.isArray(aiChecks.questionsToAsk) ? aiChecks.questionsToAsk.join(', ') : '', 'Accessoires IA': Array.isArray(aiChecks.accessoriesToCheck) ? aiChecks.accessoriesToCheck.join(', ') : '', imageType: safeText(aiSuggestion?.imageType, 'object_photo'), detectedPrice: aiSuggestion?.detectedPrice != null ? String(aiSuggestion.detectedPrice) : '', detectedCity: safeText(aiSuggestion?.detectedCity, ''), photoUsed: photoUsed ? 'true' : 'false' } }; }
+function buildSellHistoryEntry(form, data, photoUsed, competition = null) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'sell', modeLabel: 'Vente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Prix conseillé', keyMetricValue: safeMoney(data.advised), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'vente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix vente rapide': safeMoney(data.quick), 'Prix conseillé': safeMoney(data.advised), 'Prix haut': safeMoney(data.high), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), 'Titre final': safeText(data.title, 'N/A'), 'Description finale': safeText(data.description, 'N/A'), competitionAutoUsed: competition ? 'true' : 'false', competitionDetectedCount: competition && Number.isFinite(competition.detectedCount) ? String(competition.detectedCount) : '', competitionLowestPrice: competition && Number.isFinite(competition.lowestPrice) ? String(competition.lowestPrice) : '', competitionAveragePrice: competition && Number.isFinite(competition.averagePrice) ? String(competition.averagePrice) : '', competitionHighestPrice: competition && Number.isFinite(competition.highestPrice) ? String(competition.highestPrice) : '', competitionConfidence: competition ? safeText(competition.confidence, '') : '', photoUsed: photoUsed ? 'true' : 'false' } }; }
+function buildFlipHistoryEntry(form, data, photoUsed = false, aiChecks = {}, aiSuggestion = null, competition = null) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'flip', modeLabel: 'Achat-revente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Marge nette', keyMetricValue: safeMoney(data.net), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'achat-revente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix demandé': safeMoney(form.ask), 'Prix revente probable': safeMoney(data.resale), 'Marge brute': safeMoney(data.gross), 'Marge nette': safeMoney(data.net), 'Prix négociation conseillé': safeMoney(data.suggestedOffer), Risque: safeText(data.risk, 'N/A'), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), 'Risques IA': Array.isArray(aiChecks.risksToCheck) ? aiChecks.risksToCheck.join(', ') : '', 'Questions IA vendeur': Array.isArray(aiChecks.questionsToAsk) ? aiChecks.questionsToAsk.join(', ') : '', 'Accessoires IA': Array.isArray(aiChecks.accessoriesToCheck) ? aiChecks.accessoriesToCheck.join(', ') : '', imageType: safeText(aiSuggestion?.imageType, 'object_photo'), detectedPrice: aiSuggestion?.detectedPrice != null ? String(aiSuggestion.detectedPrice) : '', detectedCity: safeText(aiSuggestion?.detectedCity, ''), competitionAutoUsed: competition ? 'true' : 'false', competitionDetectedCount: competition && Number.isFinite(competition.detectedCount) ? String(competition.detectedCount) : '', competitionLowestPrice: competition && Number.isFinite(competition.lowestPrice) ? String(competition.lowestPrice) : '', competitionAveragePrice: competition && Number.isFinite(competition.averagePrice) ? String(competition.averagePrice) : '', competitionHighestPrice: competition && Number.isFinite(competition.highestPrice) ? String(competition.highestPrice) : '', competitionConfidence: competition ? safeText(competition.confidence, '') : '', photoUsed: photoUsed ? 'true' : 'false' } }; }
 function buildOpportunityHistoryEntry(form, data) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'opportunities', modeLabel: 'Recherche', category: safeText(form.category, 'autre'), decision: safeText(data.summary?.todo, 'N/A'), keyMetricLabel: 'Prix max conseillé', keyMetricValue: safeMoney(data.priceRange?.max), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'recherche opportunités', Catégorie: safeText(form.category, 'autre'), Ville: safeText(form.city, 'N/A'), Budget: safeMoney(form.budget), 'Marge minimum': safeMoney(form.minMargin), 'Risque accepté': safeText(form.risk, 'N/A'), 'Objets recommandés': (data.items || []).map((v) => safeText(v)).filter(Boolean).join(', '), 'Prix achat cible': `${safeMoney(data.priceRange?.low)} - ${safeMoney(data.priceRange?.max)}`, 'Plan d’action': safeText(data.plan, 'N/A'), photoUsed: 'false' } }; }
 
 function downloadFile(filename, content, mimeType) {

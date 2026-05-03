@@ -38,7 +38,8 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
   const fileSize = req.file?.size || 0;
   const hasApiKey = Boolean(process.env.OPENAI_API_KEY);
   const model = 'gpt-4.1-mini';
-  const imageType = req.body?.imageType === 'marketplace_screenshot' ? 'marketplace_screenshot' : 'object_photo';
+  const requestedType = req.body?.imageType;
+  const imageType = ['marketplace_screenshot', 'market_competition_screenshot'].includes(requestedType) ? requestedType : 'object_photo';
   console.log('Analyse photo: fichier reçu =', hasFile);
   console.log('Analyse photo: type MIME =', mimeType);
   console.log('Analyse photo: taille fichier (octets) =', fileSize);
@@ -65,7 +66,15 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
           content: [
             {
               type: 'input_text',
-              text: imageType === 'marketplace_screenshot'
+              text: imageType === 'market_competition_screenshot'
+                ? `Analyse cette capture de résultats Marketplace/Kijiji/Vinted/Leboncoin avec plusieurs annonces similaires visibles.
+Objet recherché (si fourni): ${String(req.body?.objectName || '').trim() || 'non précisé'}.
+Catégorie (si fournie): ${String(req.body?.category || '').trim() || 'non précisée'}.
+Retourne uniquement un JSON strict avec: imageType, detectedCount, lowestPrice, averagePrice, highestPrice, currency, items, ignoredItems, marketComment, confidence, warning.
+imageType doit être market_competition_screenshot.
+Confiance autorisée: ${allowedConfidence.join(', ')}.
+Règles: ne compter que les annonces similaires; ignorer accessoires seuls non comparables; ne pas inventer de prix; extraire montants visibles seulement; \"Gratuit\"=0 et le signaler dans marketComment; prix \"À discuter\"/absent ignorés dans moyenne; detectedCount=annonces pertinentes visibles; averagePrice arrondi à 2 décimales; si moins de 2 prix lisibles warning='Pas assez de prix lisibles pour estimer le marché.' et laisser les prix à null.`
+                : imageType === 'marketplace_screenshot'
                 ? `Analyse cette capture d’annonce Marketplace/Kijiji/Vinted/Leboncoin. Lis explicitement le texte visible dans la capture et n’utilise que ce qui est lisible. Retourne uniquement un JSON strict avec: imageType, objectName, visibleListingTitle, detectedPrice, detectedCity, category, condition, brandOrModel, visibleDescription, keywords, risksToCheck, questionsToAsk, accessoriesToCheck, confidence, warning, description.\nimageType doit être marketplace_screenshot.\nCatégories autorisées: ${allowedCategories.join(', ')}.\nÉtats autorisés: ${allowedConditions.join(', ')}.\nConfiance autorisée: ${allowedConfidence.join(', ')}.\nRègles critiques: détecte le prix affiché s’il est lisible (nombre uniquement dans detectedPrice), détecte la ville/région affichée si lisible, détecte le titre exact de l’annonce si lisible, détecte état/catégorie uniquement si visibles; n’invente jamais prix/ville/marque/titre non lisibles (mettre null ou chaîne vide), n’invente pas une description non visible, si texte flou ou partiel confidence=faible ou moyenne, indique clairement ce qui est visible, warning doit rappeler la vérification manuelle avant achat, risquesToCheck/questionsToAsk/accessoriesToCheck en tableaux courts et utiles.`
                 : `Analyse cette photo d'objet. Retourne uniquement un JSON strict avec: objectName, category, condition, keywords, description, confidence, warning, shortTitle, sellingTitle, shortDescription, detailedDescription, photoTips, sellingAdvice, risksToCheck, questionsToAsk, accessoriesToCheck.\nCatégories autorisées: ${allowedCategories.join(', ')}.\nÉtats autorisés: ${allowedConditions.join(', ')}.\nConfiance autorisée: ${allowedConfidence.join(', ')}.\nRègles: si incertain catégorie=autre et confidence=faible; ne pas inventer marque; ne jamais affirmer neuf uniquement depuis photo; état apparent uniquement; warning doit toujours rappeler confirmation manuelle; ne pas inventer de détail non visible; shortDescription et detailedDescription doivent être prêtes à publier sur Marketplace, naturelles, simples et vendeuses; ne pas inclure dans shortDescription, detailedDescription ni description de mentions d'avertissement, juridiques ou de doute (ex: "vérifiez", "confirmez", "je ne garantis pas", "sous réserve", "authenticité", "matériaux à confirmer"), sauf nécessité absolue pour objet de luxe/de marque; mettre les prudences et avertissements uniquement dans warning et/ou sellingAdvice; photoTips doit être un tableau de 0 à 5 conseils utiles; sellingAdvice doit rester prudent et réaliste; risksToCheck, questionsToAsk et accessoriesToCheck doivent être des tableaux courts et pratiques; éviter un ton juridique; garder un style simple, vendeur et naturel.`
             },
@@ -89,6 +98,31 @@ app.post('/api/analyze-photo', upload.single('photo'), async (req, res) => {
       console.error('Analyse photo: réponse brute', raw);
       console.error('Analyse photo: JSON nettoyé', cleanedJson);
       return res.status(500).json({ error: 'Réponse IA invalide' });
+    }
+
+    if (imageType === 'market_competition_screenshot') {
+      const toNumberOrNull = (value) => {
+        const raw = typeof value === 'string' ? value.replace(',', '.').replace(/[^0-9.\-]/g, '') : value;
+        const num = Number(raw);
+        return Number.isFinite(num) ? num : null;
+      };
+      const low = toNumberOrNull(parsed.lowestPrice);
+      const avgRaw = toNumberOrNull(parsed.averagePrice);
+      const high = toNumberOrNull(parsed.highestPrice);
+      const safeCompetition = {
+        imageType,
+        detectedCount: toNumberOrNull(parsed.detectedCount),
+        lowestPrice: low,
+        averagePrice: avgRaw != null ? Number(avgRaw.toFixed(2)) : null,
+        highestPrice: high,
+        currency: typeof parsed.currency === 'string' ? parsed.currency.trim() || '$' : '$',
+        items: Array.isArray(parsed.items) ? parsed.items.slice(0, 8).map((item) => ({ title: typeof item?.title === 'string' ? item.title.trim() : '', price: toNumberOrNull(item?.price), location: typeof item?.location === 'string' ? item.location.trim() : '', relevance: typeof item?.relevance === 'string' ? item.relevance.trim() : '' })) : [],
+        ignoredItems: Array.isArray(parsed.ignoredItems) ? parsed.ignoredItems.slice(0, 8).map((item) => ({ title: typeof item?.title === 'string' ? item.title.trim() : '', price: toNumberOrNull(item?.price), reason: typeof item?.reason === 'string' ? item.reason.trim() : '' })) : [],
+        marketComment: typeof parsed.marketComment === 'string' ? parsed.marketComment.trim() : '',
+        confidence: allowedConfidence.includes(parsed.confidence) ? parsed.confidence : 'faible',
+        warning: typeof parsed.warning === 'string' ? parsed.warning.trim() : ''
+      };
+      return res.json(safeCompetition);
     }
 
     const safe = {
