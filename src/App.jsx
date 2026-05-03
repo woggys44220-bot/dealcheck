@@ -416,14 +416,7 @@ function SellMode({ onBack }) {
     </section>
     {(errors.form || errors.name || errors.value || errors.city) && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeSell}>Analyser mon objet</button></div>
-    {showResult && <SellResult data={data} />}
-    {showResult && <div className="actions">
-      <button className="primary" onClick={copyTitle}>Copier le titre</button>
-      <button className="secondary" onClick={copyDescription}>Copier la description</button>
-      <button className="secondary" onClick={copyFullAd}>Copier l’annonce complète</button>
-      {showPhotoTipsCopyButton && <button className="secondary" onClick={copyPhotoTips}>Copier les conseils photo</button>}
-      <button onClick={resetSellForm}>Recommencer</button>
-    </div>}
+    {showResult && <SellResult data={data} actions={{ copyTitle, copyDescription, copyFullAd, copyPhotoTips, resetSellForm, showPhotoTipsCopyButton }} />}
     {copiedMessage && <p className="copied">{copiedMessage}</p>}
   </div>;
 }
@@ -496,8 +489,7 @@ function FlipMode({ onBack }) {
     </section>
     {Object.keys(errors).length > 0 && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
     <div className="actions"><button className="primary" onClick={analyzeFlip}>Analyser le deal</button></div>
-    {showResult && <FlipResult data={data} category={form.category} />}
-    {showResult && <div className="actions"><button className="primary" onClick={copy}>Copier le message</button><button onClick={()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' }); setErrors({}); setHasResult(false);}}>Recommencer</button></div>}
+    {showResult && <FlipResult data={data} category={form.category} actions={{ copy, reset: ()=>{setForm({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' }); setErrors({}); setHasResult(false);} }} />}
     {copied && <p className="copied">Message copié ✅</p>}
   </div>;
 }
@@ -727,27 +719,30 @@ function computeFlip(form){const ask=Number(form.ask)||0; const costs=Number(for
   : '';
  return {ask,costs,hours,timeCost,resale,gross,net,maxBuy,displayMaxBuy,displayOffer,maxBuyAdvice,score,risk,decision,strategy,negotiationMessage,ease,localCompetitionLevel,localAveragePrice:localAvg,observedMarketSummary,marketRecommendation,suggestedOffer};}
 
-function SellResult({ data }) {const tone = data.decision.includes('BAISSE') ? 'bad' : data.decision.includes('LOT') || data.decision.includes('VITE') ? 'warn' : 'good'; const summary = getSellDecisionSummary(data); return <article className={`result ${tone}`}>
+function SellResult({ data, actions }) {const tone = data.decision.includes('BAISSE') ? 'bad' : data.decision.includes('LOT') || data.decision.includes('VITE') ? 'warn' : 'good'; const summary = getSellDecisionSummary(data); const showLocalMarket = data.localCompetitionLevel !== 'non renseignée' || Number.isFinite(data.localAveragePrice) || Boolean(data.observedMarketSummary); const hasAiTips = Array.isArray(data.aiPhotoTips) && data.aiPhotoTips.length > 0; const hasAiSection = hasAiTips || Boolean(data.aiSellingAdvice) || Boolean(data.aiWarning); return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/><p className="score-note">{data.scoreHint}</p>
   <section className="decision-summary"><p className="decision-summary-title">Résumé décision</p><p><strong>À faire :</strong> {summary.todo}</p><p><strong>Pourquoi :</strong> {summary.why}</p><p><strong>Action :</strong> {summary.action}</p></section>
-  <p><strong>Prix vente rapide:</strong> {money(data.quick)}</p><p><strong>Prix conseillé:</strong> {money(data.advised)}</p><p><strong>Prix haut:</strong> {money(data.high)}</p>
-  <p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p>
-  <p><strong>Niveau:</strong> {data.ease}</p><p><strong>Stratégie:</strong> {data.strategy}</p><p><strong>Titre:</strong> {data.title}</p><p><strong>Description:</strong> {data.description}</p>
-  {Array.isArray(data.aiPhotoTips) && data.aiPhotoTips.length > 0 && <div><strong>Conseils photo IA:</strong><ul>{data.aiPhotoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul></div>}
-  {data.aiSellingAdvice && <p><strong>Conseil de mise en vente IA:</strong> {data.aiSellingAdvice}</p>}
-  {data.aiWarning && <p><strong>Avertissement IA:</strong> {data.aiWarning}</p>}
+  <section className="result-section"><p className="result-section-title">Prix conseillés</p><p><strong>Prix vente rapide:</strong> {money(data.quick)}</p><p><strong>Prix conseillé:</strong> {money(data.advised)}</p><p><strong>Prix haut:</strong> {money(data.high)}</p></section>
+  {showLocalMarket && <section className="result-section"><p className="result-section-title">Marché local</p><p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p></section>}
+  <section className="result-section"><p className="result-section-title">Stratégie</p><p><strong>Niveau:</strong> {data.ease}</p><p><strong>Stratégie:</strong> {data.strategy}</p></section>
+  <section className="result-section"><p className="result-section-title">Annonce Marketplace</p><p><strong>Titre:</strong> {data.title}</p><p><strong>Description:</strong> {data.description}</p></section>
+  {hasAiSection && <section className="result-section"><p className="result-section-title">Conseils IA</p>{hasAiTips && <div><strong>Conseils photo IA:</strong><ul>{data.aiPhotoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul></div>}{data.aiSellingAdvice && <p><strong>Conseil de mise en vente IA:</strong> {data.aiSellingAdvice}</p>}{data.aiWarning && <p><strong>Avertissement IA:</strong> {data.aiWarning}</p>}</section>}
+  <section className="result-section"><p className="result-section-title">Actions</p><div className="actions"><button className="primary" onClick={actions.copyTitle}>Copier le titre</button><button className="secondary" onClick={actions.copyDescription}>Copier la description</button><button className="secondary" onClick={actions.copyFullAd}>Copier l’annonce complète</button>{actions.showPhotoTipsCopyButton && <button className="secondary" onClick={actions.copyPhotoTips}>Copier les conseils photo</button>}<button onClick={actions.resetSellForm}>Recommencer</button></div></section>
 </article>; }
 
-function FlipResult({ data, category }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; const summary = getFlipDecisionSummary(data, category); return <article className={`result ${tone}`}>
+function FlipResult({ data, category, actions }) {const tone = data.decision==='ACHÈTE' ? 'good' : data.decision==='NÉGOCIE' ? 'warn' : 'bad'; const summary = getFlipDecisionSummary(data, category); const showLocalMarket = data.localCompetitionLevel !== 'non renseignée' || Number.isFinite(data.localAveragePrice) || Boolean(data.observedMarketSummary); return <article className={`result ${tone}`}>
   <h3>{data.decision}</h3><Score score={data.score} tone={tone}/>
   <section className="decision-summary"><p className="decision-summary-title">Résumé décision</p><p><strong>À faire :</strong> {summary.todo}</p><p><strong>Pourquoi :</strong> {summary.why}</p><p><strong>Action :</strong> {summary.action}</p></section>
-  {data.decision==='ACHÈTE'
+  <section className="result-section"><p className="result-section-title">Prix et marge</p>{data.decision==='ACHÈTE'
     ? <><p><strong>Prix demandé:</strong> {money(data.ask)}</p><p><strong>Prix demandé correct</strong></p></>
     : data.decision==='LAISSE TOMBER'
       ? <p><strong>Prix de négociation conseillé:</strong> Non rentable</p>
       : <><p><strong>Prix max théorique:</strong> {data.displayMaxBuy}</p><p><strong>Prix de négociation conseillé:</strong> {data.displayOffer}</p></>}
-  <p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p>
-  <p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p><p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message:</strong> {data.negotiationMessage}</p>
+  <p><strong>Prix revente probable:</strong> {money(data.resale)}</p><p><strong>Marge brute:</strong> {money(data.gross)}</p><p><strong>Marge nette:</strong> {money(data.net)}</p><p><strong>Frais estimés:</strong> {money(data.costs)}</p><p><strong>Temps estimé:</strong> {data.hours} h</p><p><strong>Coût temps estimé:</strong> {money(data.timeCost)}</p></section>
+  <section className="result-section"><p className="result-section-title">Risque et revente</p><p><strong>Risque:</strong> {data.risk}</p><p><strong>Facilité revente:</strong> {data.ease}</p></section>
+  {showLocalMarket && <section className="result-section"><p className="result-section-title">Marché local</p><p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p></section>}
+  <section className="result-section"><p className="result-section-title">Conseil</p><p><strong>Conseil:</strong> {data.strategy}</p>{data.maxBuyAdvice && <p><strong>Note:</strong> {data.maxBuyAdvice}</p>}<p><strong>Message vendeur:</strong> {data.negotiationMessage}</p></section>
+  <section className="result-section"><p className="result-section-title">Actions</p><div className="actions"><button className="primary" onClick={actions.copy}>Copier le message</button><button onClick={actions.reset}>Recommencer</button></div></section>
 </article>; }
 
 const Score = ({ score, tone: forcedTone }) => {
