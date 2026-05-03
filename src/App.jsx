@@ -17,6 +17,8 @@ const lotFriendlyCategories = new Set(['bijoux', 'vêtement', 'jouet', 'déco'])
 const lotNameHints = ['lot', 'ensemble', 'paire', 'plusieurs', 'accessoire', 'accessoires'];
 const singleDecorKeywords = ['lampe', 'miroir', 'cadre', 'vase', 'table', 'chaise'];
 const lowRiskBuyCategories = new Set(['outil', 'jouet', 'déco', 'sport', 'vêtement', 'bijoux']);
+const opportunityCategories = ['outil', 'téléphone', 'meuble', 'électroménager', 'bijoux', 'vêtement', 'jouet', 'sport', 'déco', 'pièce auto', 'autre'];
+const riskLevels = ['faible', 'moyen', 'élevé'];
 
 const money = (n) => `${(Number.isFinite(n) ? n : 0).toFixed(2)} $`;
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));
@@ -120,6 +122,7 @@ function App() {
         {mode === 'home' && <Home setMode={setMode} />}
         {mode === 'sell' && <SellMode onBack={() => setMode('home')} />}
         {mode === 'flip' && <FlipMode onBack={() => setMode('home')} />}
+        {mode === 'opportunities' && <OpportunityMode onBack={() => setMode('home')} />}
       </section>
     </main>
   );
@@ -132,6 +135,7 @@ function Home({ setMode }) {
     <div className="actions">
       <button className="primary" onClick={() => setMode('sell')}>Je veux vendre</button>
       <button className="secondary" onClick={() => setMode('flip')}>Je veux acheter pour revendre</button>
+      <button className="secondary" onClick={() => setMode('opportunities')}>Je cherche quoi acheter-revendre ?</button>
     </div>
   </>;
 }
@@ -528,6 +532,58 @@ function FlipMode({ onBack }) {
   </div>;
 }
 
+function OpportunityMode({ onBack }) {
+  const [form, setForm] = useState({ category: 'outil', budget: '', city: '', hours: '', minMargin: '', risk: 'faible' });
+  const [errors, setErrors] = useState({});
+  const [hasResult, setHasResult] = useState(false);
+  const data = useMemo(() => computeOpportunities(form), [form]);
+  const updateField = (field, value) => { setForm({ ...form, [field]: value }); setHasResult(false); };
+  const validate = () => {
+    const next = {};
+    ['budget', 'hours', 'minMargin'].forEach((field) => {
+      if (form[field] !== '' && (!Number.isFinite(Number(form[field])) || Number(form[field]) < 0)) next[field] = 'Valeur invalide (>= 0).';
+    });
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+  const analyze = () => { if (!validate()) return; setHasResult(true); };
+  const reset = () => { setForm({ category: 'outil', budget: '', city: '', hours: '', minMargin: '', risk: 'faible' }); setErrors({}); setHasResult(false); };
+  return <div>
+    <Header title="Recherche d’opportunités" onBack={onBack} />
+    <FormField label="Catégorie ciblée"><select value={form.category} onChange={(e) => updateField('category', e.target.value)}>{opportunityCategories.map((c) => <option key={c}>{c}</option>)}</select></FormField>
+    <FormField label="Budget maximum" error={errors.budget} invalid={!!errors.budget}><input type="number" min="0" value={form.budget} onChange={(e) => updateField('budget', e.target.value)} /></FormField>
+    <FormField label="Ville / région"><input value={form.city} onChange={(e) => updateField('city', e.target.value)} /></FormField>
+    <FormField label="Temps disponible max par deal en heures" error={errors.hours} invalid={!!errors.hours}><input type="number" min="0" value={form.hours} onChange={(e) => updateField('hours', e.target.value)} /></FormField>
+    <FormField label="Marge minimum souhaitée" error={errors.minMargin} invalid={!!errors.minMargin}><input type="number" min="0" value={form.minMargin} onChange={(e) => updateField('minMargin', e.target.value)} /></FormField>
+    <FormField label="Niveau de risque accepté"><select value={form.risk} onChange={(e) => updateField('risk', e.target.value)}>{riskLevels.map((r) => <option key={r}>{r}</option>)}</select></FormField>
+    <div className="actions"><button className="primary" onClick={analyze}>Trouver des idées</button></div>
+    {hasResult && <OpportunityResult data={data} onReset={reset} />}
+  </div>;
+}
+
+function OpportunityResult({ data, onReset }) {
+  return <article className="result">
+    <h3>Résumé décision</h3>
+    <p><strong>À chercher en priorité :</strong> {safeText(data.summary.todo, 'N/A')}</p>
+    <p><strong>Pourquoi :</strong> {safeText(data.summary.why, 'N/A')}</p>
+    <p><strong>Action concrète :</strong> {safeText(data.summary.action, 'N/A')}</p>
+    <h3>Objets recommandés</h3>
+    <ul>{data.items.map((item) => <li key={item}>{item}</li>)}</ul>
+    <p>{safeText(data.categoryTip, '')}</p>
+    <h3>Prix d’achat cible</h3>
+    <p>Achat idéal bas : <strong>{money(data.priceRange.low)}</strong> | Achat cible haut : <strong>{money(data.priceRange.targetHigh)}</strong> | Prix max conseillé : <strong>{money(data.priceRange.max)}</strong></p>
+    <h3>Stratégie de recherche Marketplace</h3>
+    <ul>{data.keywords.map((word) => <li key={word}>{word}</li>)}</ul>
+    <h3>Signaux positifs</h3>
+    <ul>{data.positiveSignals.map((s) => <li key={s}>{s}</li>)}</ul>
+    <h3>Signaux de danger</h3>
+    <ul>{data.dangerSignals.map((s) => <li key={s}>{s}</li>)}</ul>
+    <h3>Plan d’action court</h3>
+    <p>{safeText(data.plan, '')}</p>
+    <div className="actions"><button onClick={onReset}>Recommencer</button></div>
+  </article>;
+}
+
 const Header = ({ title, onBack }) => <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>{title}</h2></div>;
 const FormField = ({ label, hint, children, error, invalid }) => <label className={invalid ? 'field-error' : ''}>{label}{hint && <span className="field-hint">{hint}</span>}{children}{error && <span className="field-error-text">{error}</span>}</label>;
 
@@ -704,6 +760,49 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
     localAveragePrice: localAvg,
     observedMarketSummary,
     marketRecommendation
+  };
+}
+
+function computeOpportunities(form) {
+  const budget = Math.max(0, safeNumber(form.budget, 50) || 50);
+  const minMargin = Math.max(0, safeNumber(form.minMargin, 20) || 20);
+  const hours = Math.max(0, safeNumber(form.hours, 1) || 1);
+  const risk = riskLevels.includes(form.risk) ? form.risk : 'faible';
+  const category = opportunityCategories.includes(form.category) ? form.category : 'autre';
+  const map = {
+    outil: { items: ['perceuse sans fil', 'visseuse', 'scie circulaire', 'ponceuse', 'lot d’outils', 'coffre à outils'], tip: 'Cherche les lots mal décrits, les outils avec batterie/chargeur, et évite les outils sans test.', keys: ['perceuse sans fil', 'lot outils', 'outil batterie chargeur', 'visseuse', 'garage sale outils'] },
+    téléphone: { items: risk === 'faible' ? ['iPhone ancien modèle (très prudent)', 'Samsung Galaxy (très prudent)'] : ['iPhone ancien modèle', 'Samsung Galaxy'], tip: 'Risque élevé : vérifie IMEI, iCloud, batterie, facture, opérateur et écran.', keys: ['iPhone usagé', 'Samsung Galaxy usagé', 'téléphone débloqué', 'téléphone facture', 'cellulaire batterie'] },
+    meuble: { items: ['meuble TV', 'table basse', 'chaise', 'commode'], tip: 'Attention au transport, aux dimensions et au temps de revente. Privilégie les petits meubles.', keys: ['table basse', 'chaise lot', 'petit meuble', 'commode', 'meuble tv'] },
+    'électroménager': { items: ['aspirateur', 'cafetière', 'micro-ondes', 'air fryer'], tip: 'Teste le fonctionnement avant achat.', keys: ['aspirateur', 'micro-ondes', 'cafetière', 'air fryer', 'petit électro'] },
+    bijoux: { items: ['lots de bracelets', 'bijoux fantaisie', 'lots de colliers'], tip: 'Le lot est souvent plus intéressant que la pièce seule.', keys: ['lot bijoux', 'bracelets lot', 'colliers lot', 'bijoux fantaisie', 'bijoux vintage'] },
+    vêtement: { items: ['lots de vêtements', 'manteaux', 'baskets propres', 'marques connues'], tip: 'Vérifie taille, état, marque et saison.', keys: ['lot vêtements', 'manteau marque', 'baskets', 'vêtements marque', 'friperie lot'] },
+    jouet: { items: ['Lego', 'Playmobil', 'jeux de société', 'lots de jouets'], tip: 'Les lots et marques connues se revendent mieux.', keys: ['lego lot', 'playmobil lot', 'jeu société', 'jouets lot', 'jouet marque'] },
+    sport: { items: ['haltères', 'vélo enfant', 'tapis de marche', 'accessoires fitness'], tip: 'Vérifie état, encombrement et demande locale.', keys: ['haltères', 'vélo enfant', 'tapis marche', 'fitness accessoires', 'sport maison'] },
+    déco: { items: ['miroirs', 'lampes', 'cadres', 'petits lots déco'], tip: 'Photos propres et style actuel importants.', keys: ['miroir déco', 'lampe', 'cadres', 'lot déco', 'décoration maison'] },
+    'pièce auto': { items: ['phares', 'feux arrière', 'jantes', 'pièces carrosserie'], tip: 'Vérifie compatibilité modèle/année et état.', keys: ['phare auto', 'feu arrière', 'jante', 'pièce carrosserie', 'pièce auto modèle'] },
+    autre: { items: ['objets de niche à bas prix', 'lots multi-objets', 'marques connues'], tip: 'Commence par des objets simples à tester, transporter et revendre vite.', keys: ['lot', 'débarras', 'vente rapide', 'objet marque', 'petit prix'] }
+  };
+  const details = map[category] || map.autre;
+  const riskCoef = risk === 'faible' ? 0.9 : risk === 'moyen' ? 1 : 1.12;
+  const timeCoef = hours <= 1 ? 0.9 : hours <= 2 ? 1 : 1.12;
+  const categoryCoef = category === 'téléphone' ? 1.08 : category === 'meuble' ? 0.95 : 1;
+  const rawMax = Math.max(5, (budget - minMargin) * 0.85 * riskCoef * timeCoef * categoryCoef);
+  const max = Math.min(budget, Math.round(rawMax / 5) * 5);
+  const targetHigh = Math.max(5, Math.round((max * 0.83) / 5) * 5);
+  const low = Math.max(5, Math.round((targetHigh * 0.5) / 5) * 5);
+  return {
+    items: details.items,
+    categoryTip: details.tip,
+    keywords: details.keys,
+    summary: {
+      todo: `${details.items.slice(0, 3).join(', ')} à ${formatCity(form.city)}.`,
+      why: risk === 'faible' && category === 'téléphone' ? 'Tu veux limiter le risque, donc ce segment est plus sensible et demande plus de vérifications.' : `Ces objets offrent souvent une rotation correcte avec un budget de ${money(budget)}.`,
+      action: `Cherche 10 annonces et garde seulement celles sous ${money(targetHigh)} avec test possible.`
+    },
+    priceRange: { low, targetHigh, max },
+    positiveSignals: ['prix bas', 'annonce mal écrite mais objet intéressant', 'lot', 'vendeur pressé', 'accessoires inclus', 'photos réelles', 'marque connue'],
+    dangerSignals: ['pas de test possible', 'objet cassé', 'prix proche du prix de revente', 'trop encombrant', 'téléphone bloqué', 'aucune photo réelle', 'vendeur flou'],
+    plan: `Cherche 10 annonces. Garde celles où tu peux acheter sous ${money(targetHigh)}. Contacte vite les vendeurs et teste l’objet avant achat.`
   };
 }
 
