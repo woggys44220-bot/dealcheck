@@ -244,21 +244,39 @@ ${safeQueries.map((q) => `- ${q}`).join('\n')}
 
 function GuidedFlipJourney({ form, aiSuggestion, competitionResult, competitionAutoUsed, hasResult, resultData }) {
   const detectedObject = safeText(aiSuggestion?.visibleListingTitle || aiSuggestion?.objectName, '');
-  const detectedPrice = aiSuggestion?.detectedPrice != null && Number.isFinite(Number(aiSuggestion?.detectedPrice)) ? Number(aiSuggestion.detectedPrice) : null;
+  const toPositiveNumber = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const detectedPrice = toPositiveNumber(aiSuggestion?.detectedPrice);
   const detectedCity = safeText(aiSuggestion?.detectedCity, '');
   const formObjectFilled = !!safeText(form?.name, '');
-  const formPriceFilled = Number.isFinite(Number(form?.ask));
+  const formPriceValue = toPositiveNumber(form?.ask);
+  const formPriceFilled = formPriceValue != null;
   const formCityFilled = !!safeText(form?.city, '');
 
-  const step1Done = !!detectedObject;
-  const step2ManualReady = ['localCount', 'localLow', 'localAvg', 'localHigh'].every((key) => Number.isFinite(Number(form?.[key])));
-  const step2Done = step2ManualReady || !!competitionAutoUsed;
+  const step1Done = !!detectedObject || formObjectFilled;
+  const manualCompetition = {
+    count: toPositiveNumber(form?.localCount),
+    low: toPositiveNumber(form?.localLow),
+    avg: toPositiveNumber(form?.localAvg),
+    high: toPositiveNumber(form?.localHigh)
+  };
+  const step2ManualReady = [manualCompetition.count, manualCompetition.low, manualCompetition.avg, manualCompetition.high].every((v) => v != null);
+  const autoCompetition = {
+    count: toPositiveNumber(competitionResult?.detectedCount),
+    low: toPositiveNumber(competitionResult?.lowestPrice),
+    avg: toPositiveNumber(competitionResult?.averagePrice),
+    high: toPositiveNumber(competitionResult?.highestPrice)
+  };
+  const step2AutoReady = !!competitionAutoUsed && [autoCompetition.count, autoCompetition.low, autoCompetition.avg, autoCompetition.high].every((v) => v != null);
+  const step2Done = step2ManualReady || step2AutoReady;
   const step3Done = !!hasResult;
 
-  const competitionCount = Number.isFinite(Number(form?.localCount)) ? Number(form.localCount) : (Number.isFinite(Number(competitionResult?.detectedCount)) ? Number(competitionResult.detectedCount) : null);
-  const competitionLow = Number.isFinite(Number(form?.localLow)) ? Number(form.localLow) : (Number.isFinite(Number(competitionResult?.lowestPrice)) ? Number(competitionResult.lowestPrice) : null);
-  const competitionAvg = Number.isFinite(Number(form?.localAvg)) ? Number(form.localAvg) : (Number.isFinite(Number(competitionResult?.averagePrice)) ? Number(competitionResult.averagePrice) : null);
-  const competitionHigh = Number.isFinite(Number(form?.localHigh)) ? Number(form.localHigh) : (Number.isFinite(Number(competitionResult?.highestPrice)) ? Number(competitionResult.highestPrice) : null);
+  const competitionCount = step2ManualReady ? manualCompetition.count : step2AutoReady ? autoCompetition.count : null;
+  const competitionLow = step2ManualReady ? manualCompetition.low : step2AutoReady ? autoCompetition.low : null;
+  const competitionAvg = step2ManualReady ? manualCompetition.avg : step2AutoReady ? autoCompetition.avg : null;
+  const competitionHigh = step2ManualReady ? manualCompetition.high : step2AutoReady ? autoCompetition.high : null;
 
   const requiredDealFieldsReady = Number.isFinite(Number(form?.costs)) && Number.isFinite(Number(form?.hours)) && Number.isFinite(Number(form?.minMargin));
 
@@ -281,7 +299,7 @@ function GuidedFlipJourney({ form, aiSuggestion, competitionResult, competitionA
       done: step1Done,
       details: [
         detectedObject ? `Objet détecté : ${detectedObject}` : '',
-        (detectedPrice != null || formPriceFilled) ? `Prix : ${detectedPrice != null ? `${detectedPrice} $` : `${Number(form.ask)} $`}` : '',
+        (detectedPrice != null || formPriceFilled) ? `Prix : ${detectedPrice != null ? `${detectedPrice} $` : `${formPriceValue} $`}` : '',
         (detectedCity || formCityFilled) ? `Ville : ${detectedCity || safeText(form.city, '')}` : ''
       ].filter(Boolean)
     },
