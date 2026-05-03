@@ -1033,7 +1033,18 @@ function HistoryMode({ entries, onBack, onDelete, onClear }) {
     </section>
     {selected && <article className="result">
       <h3>Détail</h3>
-      {Object.entries(selected.details || {}).map(([key, value]) => <p key={key}><strong>{key} :</strong> {safeText(value, 'N/A')}</p>)}
+      {Object.entries(selected.details || {}).map(([key, value]) => {
+        const displayKey = key === 'photoUsed' ? 'Photo utilisée' : key;
+        const normalizedValue = typeof value === 'string' ? value.trim() : value;
+        const displayValue = key === 'Score'
+          ? `${Number(normalizedValue).toFixed(Number.isInteger(Number(normalizedValue)) ? 0 : 1)}/100`
+          : key === 'photoUsed'
+            ? (String(normalizedValue).toLowerCase() === 'true' ? 'oui' : 'non')
+            : key === 'Concurrence locale' && (normalizedValue === 'N/A' || normalizedValue === '')
+              ? 'non renseignée'
+              : safeText(normalizedValue, 'N/A');
+        return <p key={key}><strong>{displayKey} :</strong> {displayValue}</p>;
+      })}
       <button onClick={() => setSelected(null)}>Fermer</button>
     </article>}
   </div>;
