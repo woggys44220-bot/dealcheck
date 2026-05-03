@@ -19,6 +19,8 @@ const singleDecorKeywords = ['lampe', 'miroir', 'cadre', 'vase', 'table', 'chais
 const lowRiskBuyCategories = new Set(['outil', 'jouet', 'déco', 'sport', 'vêtement', 'bijoux']);
 const opportunityCategories = ['outil', 'téléphone', 'meuble', 'électroménager', 'bijoux', 'vêtement', 'jouet', 'sport', 'déco', 'pièce auto', 'autre'];
 const riskLevels = ['faible', 'moyen', 'élevé'];
+const HISTORY_KEY = 'dealcheck_v16_history';
+const HISTORY_LIMIT = 50;
 
 const money = (n) => `${(Number.isFinite(n) ? n : 0).toFixed(2)} $`;
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));
@@ -116,13 +118,31 @@ function getFlipDecisionSummary(data, category) {
 
 function App() {
   const [mode, setMode] = useState('home');
+  const [historyEntries, setHistoryEntries] = useState(() => loadHistory());
+  const addHistoryEntry = (entry) => {
+    setHistoryEntries((prev) => {
+      const next = [entry, ...prev].slice(0, HISTORY_LIMIT);
+      saveHistory(next);
+      return next;
+    });
+  };
+  const deleteHistoryEntry = (id) => setHistoryEntries((prev) => {
+    const next = prev.filter((item) => item.id !== id);
+    saveHistory(next);
+    return next;
+  });
+  const clearHistory = () => setHistoryEntries(() => {
+    saveHistory([]);
+    return [];
+  });
   return (
     <main className="app">
       <section className="card">
         {mode === 'home' && <Home setMode={setMode} />}
-        {mode === 'sell' && <SellMode onBack={() => setMode('home')} />}
-        {mode === 'flip' && <FlipMode onBack={() => setMode('home')} />}
-        {mode === 'opportunities' && <OpportunityMode onBack={() => setMode('home')} />}
+        {mode === 'sell' && <SellMode onBack={() => setMode('home')} onSaveHistory={addHistoryEntry} />}
+        {mode === 'flip' && <FlipMode onBack={() => setMode('home')} onSaveHistory={addHistoryEntry} />}
+        {mode === 'opportunities' && <OpportunityMode onBack={() => setMode('home')} onSaveHistory={addHistoryEntry} />}
+        {mode === 'history' && <HistoryMode entries={historyEntries} onBack={() => setMode('home')} onDelete={deleteHistoryEntry} onClear={clearHistory} />}
       </section>
     </main>
   );
@@ -136,11 +156,12 @@ function Home({ setMode }) {
       <button className="primary" onClick={() => setMode('sell')}>Je veux vendre</button>
       <button className="secondary" onClick={() => setMode('flip')}>Je veux acheter pour revendre</button>
       <button className="secondary" onClick={() => setMode('opportunities')}>Je cherche quoi acheter-revendre ?</button>
+      <button className="secondary" onClick={() => setMode('history')}>Historique</button>
     </div>
   </>;
 }
 
-function SellMode({ onBack }) {
+function SellMode({ onBack, onSaveHistory }) {
   const [form, setForm] = useState({ name: '', category: categories[0], condition: conditions[1], value: '', city: '', objective: objectives[0], localCount: '', localLow: '', localAvg: '', localHigh: '' });
   const [copiedMessage, setCopiedMessage] = useState('');
   const [errors, setErrors] = useState({});
@@ -199,6 +220,7 @@ function SellMode({ onBack }) {
   const analyzeSell = () => {
     if (!validateSellForm()) return;
     setHasResult(true);
+    onSaveHistory(buildSellHistoryEntry(form, data, Boolean(photoPreview)));
   };
 
   const resetSellForm = () => {
@@ -457,7 +479,7 @@ function SellMode({ onBack }) {
   </div>;
 }
 
-function FlipMode({ onBack }) {
+function FlipMode({ onBack, onSaveHistory }) {
   const [form, setForm] = useState({ name:'', category:categories[0], condition:conditions[1], ask:'', costs:'', hours:'', city:'', minMargin:'', localCount:'', localLow:'', localAvg:'', localHigh:'' });
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState({});
@@ -501,6 +523,7 @@ function FlipMode({ onBack }) {
   const analyzeFlip = () => {
     if (!validateFlipForm()) return;
     setHasResult(true);
+    onSaveHistory(buildFlipHistoryEntry(form, data));
   };
 
   const showResult = hasResult;
@@ -532,7 +555,7 @@ function FlipMode({ onBack }) {
   </div>;
 }
 
-function OpportunityMode({ onBack }) {
+function OpportunityMode({ onBack, onSaveHistory }) {
   const [form, setForm] = useState({ category: 'outil', budget: '', city: '', hours: '', minMargin: '', risk: 'faible' });
   const [errors, setErrors] = useState({});
   const [hasResult, setHasResult] = useState(false);
@@ -547,7 +570,7 @@ function OpportunityMode({ onBack }) {
     setErrors(next);
     return Object.keys(next).length === 0;
   };
-  const analyze = () => { if (!validate()) return; setHasResult(true); };
+  const analyze = () => { if (!validate()) return; setHasResult(true); onSaveHistory(buildOpportunityHistoryEntry(form, data)); };
   const reset = () => { setForm({ category: 'outil', budget: '', city: '', hours: '', minMargin: '', risk: 'faible' }); setErrors({}); setHasResult(false); setCopiedMessage(''); };
   return <div>
     <Header title="Recherche d’opportunités" onBack={onBack} />
@@ -988,3 +1011,38 @@ const Score = ({ score, tone: forcedTone }) => {
 };
 
 export default App;
+function HistoryMode({ entries, onBack, onDelete, onClear }) {
+  const [selected, setSelected] = useState(null);
+  const clearAll = () => { if (window.confirm('Supprimer tout l’historique ?')) onClear(); };
+  return <div>
+    <div className="header"><button onClick={onBack}>← Retour accueil</button><h2>Historique</h2></div>
+    <div className="actions">
+      <button className="secondary" onClick={clearAll}>Vider l’historique</button>
+    </div>
+    {!entries.length && <p>Aucune analyse sauvegardée.</p>}
+    <section className="history-list">
+      {entries.map((entry) => <article key={entry.id} className="history-card">
+        <p>{formatHistoryDate(entry.createdAt)} • <span className="history-tag">{safeText(entry.modeLabel, 'Mode')}</span></p>
+        <p><strong>{safeText(entry.name || entry.category, 'Sans nom')}</strong></p>
+        <p>{safeText(entry.decision, 'N/A')} • {safeText(entry.keyMetricLabel, 'Info')}: {safeText(entry.keyMetricValue, 'N/A')}</p>
+        <div className="actions">
+          <button className="secondary" onClick={() => setSelected(entry)}>Voir détail</button>
+          <button onClick={() => onDelete(entry.id)}>Supprimer</button>
+        </div>
+      </article>)}
+    </section>
+    {selected && <article className="result">
+      <h3>Détail</h3>
+      {Object.entries(selected.details || {}).map(([key, value]) => <p key={key}><strong>{key} :</strong> {safeText(value, 'N/A')}</p>)}
+      <button onClick={() => setSelected(null)}>Fermer</button>
+    </article>}
+  </div>;
+}
+
+function loadHistory() { try { const parsed = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
+function saveHistory(entries) { localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(0, HISTORY_LIMIT))); }
+function createHistoryId() { return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
+function formatHistoryDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Date inconnue' : date.toLocaleString('fr-CA'); }
+function buildSellHistoryEntry(form, data, photoUsed) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'sell', modeLabel: 'Vente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Prix conseillé', keyMetricValue: safeMoney(data.advised), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'vente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix vente rapide': safeMoney(data.quick), 'Prix conseillé': safeMoney(data.advised), 'Prix haut': safeMoney(data.high), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), 'Titre final': safeText(data.title, 'N/A'), 'Description finale': safeText(data.description, 'N/A'), photoUsed: photoUsed ? 'true' : 'false' } }; }
+function buildFlipHistoryEntry(form, data) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'flip', modeLabel: 'Achat-revente', name: safeText(form.name, 'Objet'), category: safeText(form.category, 'autre'), decision: safeText(data.decision, 'N/A'), keyMetricLabel: 'Marge nette', keyMetricValue: safeMoney(data.net), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'achat-revente', Objet: safeText(form.name, 'Objet'), Catégorie: safeText(form.category, 'autre'), État: safeText(form.condition, 'N/A'), Ville: safeText(form.city, 'N/A'), Décision: safeText(data.decision, 'N/A'), Score: safeNumber(data.score, 0), 'Prix demandé': safeMoney(form.ask), 'Prix revente probable': safeMoney(data.resale), 'Marge brute': safeMoney(data.gross), 'Marge nette': safeMoney(data.net), 'Prix négociation conseillé': safeMoney(data.suggestedOffer), Risque: safeText(data.risk, 'N/A'), 'Concurrence locale': safeText(data.localCompetitionText, 'N/A'), photoUsed: 'false' } }; }
+function buildOpportunityHistoryEntry(form, data) { return { id: createHistoryId(), createdAt: new Date().toISOString(), mode: 'opportunities', modeLabel: 'Recherche', category: safeText(form.category, 'autre'), decision: safeText(data.summary?.todo, 'N/A'), keyMetricLabel: 'Prix max conseillé', keyMetricValue: safeMoney(data.priceRange?.max), details: { 'Date/heure': formatHistoryDate(new Date().toISOString()), Mode: 'recherche opportunités', Catégorie: safeText(form.category, 'autre'), Ville: safeText(form.city, 'N/A'), Budget: safeMoney(form.budget), 'Marge minimum': safeMoney(form.minMargin), 'Risque accepté': safeText(form.risk, 'N/A'), 'Objets recommandés': (data.items || []).map((v) => safeText(v)).filter(Boolean).join(', '), 'Prix achat cible': `${safeMoney(data.priceRange?.low)} - ${safeMoney(data.priceRange?.max)}`, 'Plan d’action': safeText(data.plan, 'N/A'), photoUsed: 'false' } }; }
