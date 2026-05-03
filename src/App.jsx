@@ -555,7 +555,7 @@ function computeSell(form, hasPhoto = false, aiDescription = '', aiSellingTitle 
         : Math.min(Math.max(advised, localAvg * 1.05), localAvg * 1.15);
       score -= 6;
       marketRecommendation = lotCategories.has(form.category)
-        ? 'Concurrence forte : garde un prix proche du marché. Avec forte concurrence, vise un prix proche du marché ou propose un lot pour augmenter la valeur perçue.'
+        ? 'Concurrence forte : vise un prix proche du marché, ajoute de bonnes photos ou propose un lot pour te démarquer.'
         : 'Concurrence forte : garde un prix proche du marché pour vendre plus vite.';
     } else if (ratioToLocalAvg >= 1.25) {
       advised *= 0.93;
@@ -726,7 +726,7 @@ function SellResult({ data, actions }) {const tone = data.decision.includes('BAI
   {showLocalMarket && <section className="result-section"><p className="result-section-title">Marché local</p><p><strong>Concurrence locale:</strong> {data.localCompetitionLevel}</p>{Number.isFinite(data.localAveragePrice) && <p><strong>Prix moyen local:</strong> {money(data.localAveragePrice)}</p>}{data.observedMarketSummary && <p><strong>Marché local observé:</strong> {data.observedMarketSummary.replace('Marché local observé : ','')}</p>}<p><strong>Recommandation marché:</strong> {data.marketRecommendation}</p></section>}
   <section className="result-section"><p className="result-section-title">Stratégie</p><p><strong>Niveau:</strong> {data.ease}</p><p><strong>Stratégie:</strong> {data.strategy}</p></section>
   <section className="result-section"><p className="result-section-title">Annonce Marketplace</p><p><strong>Titre:</strong> {data.title}</p><p><strong>Description:</strong> {data.description}</p></section>
-  {hasAiSection && <section className="result-section"><p className="result-section-title">Conseils IA</p>{hasAiTips && <div><strong>Conseils photo IA:</strong><ul>{data.aiPhotoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul></div>}{data.aiSellingAdvice && <p><strong>Conseil de mise en vente IA:</strong> {data.aiSellingAdvice}</p>}{data.aiWarning && <p><strong>Avertissement IA:</strong> {data.aiWarning}</p>}</section>}
+  {hasAiSection && <section className="result-section"><p className="result-section-title">Conseils IA</p>{hasAiTips && <div className="ai-advice-block"><p className="ai-advice-subtitle">Conseils photo IA</p><ul>{data.aiPhotoTips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul></div>}{data.aiSellingAdvice && <div className="ai-advice-block"><p className="ai-advice-subtitle">Conseil de mise en vente IA</p><p>{data.aiSellingAdvice}</p></div>}{data.aiWarning && <div className="ai-advice-block"><p className="ai-advice-subtitle">Avertissement IA</p><p>{data.aiWarning}</p></div>}</section>}
   <section className="result-section"><p className="result-section-title">Actions</p><div className="actions"><button className="primary" onClick={actions.copyTitle}>Copier le titre</button><button className="secondary" onClick={actions.copyDescription}>Copier la description</button><button className="secondary" onClick={actions.copyFullAd}>Copier l’annonce complète</button>{actions.showPhotoTipsCopyButton && <button className="secondary" onClick={actions.copyPhotoTips}>Copier les conseils photo</button>}<button onClick={actions.resetSellForm}>Recommencer</button></div></section>
 </article>; }
 

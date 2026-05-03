@@ -17,3 +17,6 @@
 .choice-option{background:#f8fafc;border:1px solid #cbd5e1;text-align:left;font-weight:600}
 .choice-option.selected{background:#e2e8f0;border-color:#334155}
 @media (min-width:520px){.choice-options{grid-template-columns:1fr 1fr}}
+.ai-advice-block{margin:0 0 10px}
+.ai-advice-block:last-child{margin-bottom:0}
+.ai-advice-subtitle{margin:0 0 6px;font-weight:700;color:#1e293b}
