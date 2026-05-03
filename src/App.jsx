@@ -435,10 +435,11 @@ function SellMode({ onBack }) {
     <section>
       <h3>Concurrence locale</h3>
       <p className="field-hint">Optionnel : indique ce que tu vois sur les annonces similaires pour ajuster ton prix de vente.</p>
-      <FormField label="Nombre d’annonces similaires" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localCount} onChange={(e)=>{updateSellField('localCount', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
-      <FormField label="Prix le plus bas observé" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localLow} onChange={(e)=>{updateSellField('localLow', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
-      <FormField label="Prix moyen observé" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localAvg} onChange={(e)=>{updateSellField('localAvg', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
-      <FormField label="Prix le plus haut observé" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localHigh} onChange={(e)=>{updateSellField('localHigh', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Nombre d’annonces similaires" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localCount} onChange={(e)=>{updateSellField('localCount', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix le plus bas observé" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localLow} onChange={(e)=>{updateSellField('localLow', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix moyen observé" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localAvg} onChange={(e)=>{updateSellField('localAvg', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix le plus haut observé" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localHigh} onChange={(e)=>{updateSellField('localHigh', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      {errors.localCompetition && <p className="form-error">{errors.localCompetition}</p>}
     </section>
     {errors.amounts && <p className="form-error">{errors.amounts}</p>}
     {(errors.form || errors.name || errors.value || errors.city) && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
@@ -509,10 +510,11 @@ function FlipMode({ onBack }) {
     <section>
       <h3>Concurrence locale</h3>
       <p className="field-hint">Optionnel : indique ce que tu vois sur les annonces similaires autour de toi pour affiner le verdict.</p>
-      <FormField label="Nombre d’annonces similaires" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localCount} onChange={(e)=>{updateFlipField('localCount', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
-      <FormField label="Prix le plus bas constaté" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localLow} onChange={(e)=>{updateFlipField('localLow', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
-      <FormField label="Prix moyen constaté" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localAvg} onChange={(e)=>{updateFlipField('localAvg', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
-      <FormField label="Prix le plus haut constaté" error={errors.localCompetition} invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localHigh} onChange={(e)=>{updateFlipField('localHigh', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Nombre d’annonces similaires" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localCount} onChange={(e)=>{updateFlipField('localCount', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix le plus bas constaté" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localLow} onChange={(e)=>{updateFlipField('localLow', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix moyen constaté" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localAvg} onChange={(e)=>{updateFlipField('localAvg', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      <FormField label="Prix le plus haut constaté" invalid={!!errors.localCompetition}><input type="number" min="0" value={form.localHigh} onChange={(e)=>{updateFlipField('localHigh', e.target.value); if (errors.localCompetition) setErrors({...errors,localCompetition:undefined});}}/></FormField>
+      {errors.localCompetition && <p className="form-error">{errors.localCompetition}</p>}
     </section>
     {errors.amounts && <p className="form-error">{errors.amounts}</p>}
     {Object.keys(errors).some((key) => key !== 'amounts') && <p className="form-error">Merci de remplir les champs obligatoires avant l’analyse.</p>}
