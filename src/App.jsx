@@ -536,6 +536,7 @@ function OpportunityMode({ onBack }) {
   const [form, setForm] = useState({ category: 'outil', budget: '', city: '', hours: '', minMargin: '', risk: 'faible' });
   const [errors, setErrors] = useState({});
   const [hasResult, setHasResult] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState('');
   const data = useMemo(() => computeOpportunities(form), [form]);
   const updateField = (field, value) => { setForm({ ...form, [field]: value }); setHasResult(false); };
   const validate = () => {
@@ -547,7 +548,7 @@ function OpportunityMode({ onBack }) {
     return Object.keys(next).length === 0;
   };
   const analyze = () => { if (!validate()) return; setHasResult(true); };
-  const reset = () => { setForm({ category: 'outil', budget: '', city: '', hours: '', minMargin: '', risk: 'faible' }); setErrors({}); setHasResult(false); };
+  const reset = () => { setForm({ category: 'outil', budget: '', city: '', hours: '', minMargin: '', risk: 'faible' }); setErrors({}); setHasResult(false); setCopiedMessage(''); };
   return <div>
     <Header title="Recherche d’opportunités" onBack={onBack} />
     <FormField label="Catégorie ciblée"><select value={form.category} onChange={(e) => updateField('category', e.target.value)}>{opportunityCategories.map((c) => <option key={c}>{c}</option>)}</select></FormField>
@@ -557,30 +558,76 @@ function OpportunityMode({ onBack }) {
     <FormField label="Marge minimum souhaitée" error={errors.minMargin} invalid={!!errors.minMargin}><input type="number" min="0" value={form.minMargin} onChange={(e) => updateField('minMargin', e.target.value)} /></FormField>
     <FormField label="Niveau de risque accepté"><select value={form.risk} onChange={(e) => updateField('risk', e.target.value)}>{riskLevels.map((r) => <option key={r}>{r}</option>)}</select></FormField>
     <div className="actions"><button className="primary" onClick={analyze}>Trouver des idées</button></div>
-    {hasResult && <OpportunityResult data={data} onReset={reset} />}
+    {hasResult && <OpportunityResult data={data} onReset={reset} onCopied={setCopiedMessage} />}
+    {copiedMessage && <p className="copied">{copiedMessage} ✅</p>}
   </div>;
 }
 
-function OpportunityResult({ data, onReset }) {
+function OpportunityResult({ data, onReset, onCopied }) {
+  const sanitizeList = (values = []) => values.map((value) => safeText(value, '')).filter(Boolean);
+  const objects = sanitizeList(data.items);
+  const keywords = sanitizeList(data.keywords);
+  const positives = sanitizeList(data.positiveSignals);
+  const dangers = sanitizeList(data.dangerSignals);
+  const safePlan = safeText(data.plan, '');
+  const safeTodo = safeText(data.summary?.todo, '');
+  const safeWhy = safeText(data.summary?.why, '');
+  const safeAction = safeText(data.summary?.action, '');
+  const copyText = async (text, successMessage) => {
+    const payload = safeText(text, '');
+    if (!payload) return;
+    try {
+      await navigator.clipboard.writeText(payload);
+      onCopied(successMessage);
+      setTimeout(() => onCopied(''), 2500);
+    } catch (_error) {
+      onCopied('');
+    }
+  };
+  const copySummary = () => {
+    const sections = [];
+    sections.push('Résumé décision :');
+    if (safeTodo) sections.push(`À chercher en priorité : ${safeTodo}`);
+    if (safeWhy) sections.push(`Pourquoi : ${safeWhy}`);
+    if (safeAction) sections.push(`Action concrète : ${safeAction}`);
+    if (objects.length) {
+      sections.push('', 'Objets recommandés :', ...objects.map((item) => `- ${item}`));
+    }
+    sections.push('', 'Prix d’achat cible :', `Achat idéal bas : ${safeMoney(data.priceRange?.low)}`, `Achat cible haut : ${safeMoney(data.priceRange?.targetHigh)}`, `Prix max conseillé : ${safeMoney(data.priceRange?.max)}`);
+    if (keywords.length) sections.push('', 'Recherches Marketplace :', ...keywords.map((word) => `- ${word}`));
+    if (positives.length) sections.push('', 'Signaux positifs :', ...positives.map((signal) => `- ${signal}`));
+    if (dangers.length) sections.push('', 'Signaux de danger :', ...dangers.map((signal) => `- ${signal}`));
+    if (safePlan) sections.push('', 'Plan d’action :', safePlan);
+    copyText(sections.join('\n'), 'Résumé copié');
+  };
   return <article className="result">
     <h3>Résumé décision</h3>
     <p><strong>À chercher en priorité :</strong> {safeText(data.summary.todo, 'N/A')}</p>
     <p><strong>Pourquoi :</strong> {safeText(data.summary.why, 'N/A')}</p>
     <p><strong>Action concrète :</strong> {safeText(data.summary.action, 'N/A')}</p>
     <h3>Objets recommandés</h3>
-    <ul>{data.items.map((item) => <li key={item}>{item}</li>)}</ul>
+    <ul>{objects.map((item) => <li key={item}>{item}</li>)}</ul>
     <p>{safeText(data.categoryTip, '')}</p>
     <h3>Prix d’achat cible</h3>
     <p>Achat idéal bas : <strong>{money(data.priceRange.low)}</strong> | Achat cible haut : <strong>{money(data.priceRange.targetHigh)}</strong> | Prix max conseillé : <strong>{money(data.priceRange.max)}</strong></p>
     <h3>Stratégie de recherche Marketplace</h3>
-    <ul>{data.keywords.map((word) => <li key={word}>{word}</li>)}</ul>
+    <ul>{keywords.map((word) => <li key={word}>{word}</li>)}</ul>
     <h3>Signaux positifs</h3>
-    <ul>{data.positiveSignals.map((s) => <li key={s}>{s}</li>)}</ul>
+    <ul>{positives.map((s) => <li key={s}>{s}</li>)}</ul>
     <h3>Signaux de danger</h3>
-    <ul>{data.dangerSignals.map((s) => <li key={s}>{s}</li>)}</ul>
+    <ul>{dangers.map((s) => <li key={s}>{s}</li>)}</ul>
     <h3>Plan d’action court</h3>
-    <p>{safeText(data.plan, '')}</p>
-    <div className="actions"><button onClick={onReset}>Recommencer</button></div>
+    <p>{safePlan}</p>
+    <section className="result-section">
+      <p className="result-section-title">Actions</p>
+      <div className="actions">
+        <button className="secondary" onClick={() => copyText(keywords.join('\n'), 'Recherches copiées')}>Copier les recherches</button>
+        <button className="secondary" onClick={() => copyText(objects.join('\n'), 'Objets copiés')}>Copier les objets</button>
+        <button className="secondary" onClick={() => copyText(safePlan, 'Plan copié')}>Copier le plan</button>
+        <button className="primary" onClick={copySummary}>Copier le résumé complet</button>
+        <button onClick={onReset}>Recommencer</button>
+      </div>
+    </section>
   </article>;
 }
 
