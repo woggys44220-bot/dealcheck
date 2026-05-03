@@ -241,6 +241,73 @@ ${safeQueries.map((q) => `- ${q}`).join('\n')}
   </article>;
 }
 
+
+function GuidedFlipJourney({ form, aiSuggestion, competitionResult, competitionAutoUsed, hasResult, resultData }) {
+  const detectedObject = safeText(aiSuggestion?.visibleListingTitle || aiSuggestion?.objectName, '');
+  const detectedPrice = aiSuggestion?.detectedPrice != null && Number.isFinite(Number(aiSuggestion?.detectedPrice)) ? Number(aiSuggestion.detectedPrice) : null;
+  const detectedCity = safeText(aiSuggestion?.detectedCity, '');
+  const formObjectFilled = !!safeText(form?.name, '');
+  const formPriceFilled = Number.isFinite(Number(form?.ask));
+  const formCityFilled = !!safeText(form?.city, '');
+
+  const step1Done = !!detectedObject;
+  const step2ManualReady = ['localCount', 'localLow', 'localAvg', 'localHigh'].every((key) => Number.isFinite(Number(form?.[key])));
+  const step2Done = step2ManualReady || !!competitionAutoUsed;
+  const step3Done = !!hasResult;
+
+  const competitionCount = Number.isFinite(Number(form?.localCount)) ? Number(form.localCount) : (Number.isFinite(Number(competitionResult?.detectedCount)) ? Number(competitionResult.detectedCount) : null);
+  const competitionLow = Number.isFinite(Number(form?.localLow)) ? Number(form.localLow) : (Number.isFinite(Number(competitionResult?.lowestPrice)) ? Number(competitionResult.lowestPrice) : null);
+  const competitionAvg = Number.isFinite(Number(form?.localAvg)) ? Number(form.localAvg) : (Number.isFinite(Number(competitionResult?.averagePrice)) ? Number(competitionResult.averagePrice) : null);
+  const competitionHigh = Number.isFinite(Number(form?.localHigh)) ? Number(form.localHigh) : (Number.isFinite(Number(competitionResult?.highestPrice)) ? Number(competitionResult.highestPrice) : null);
+
+  const requiredDealFieldsReady = Number.isFinite(Number(form?.costs)) && Number.isFinite(Number(form?.hours)) && Number.isFinite(Number(form?.minMargin));
+
+  let nextAction = 'Importe une photo de l’objet ou une capture d’annonce Marketplace.';
+  if (detectedObject && (!formObjectFilled || !formPriceFilled || !formCityFilled)) {
+    nextAction = 'Clique sur Utiliser les infos de l’annonce ou complète les champs manuellement.';
+  } else if (formObjectFilled && formPriceFilled && formCityFilled && !step2Done) {
+    nextAction = 'Copie une recherche suggérée, fais une capture des résultats Marketplace, puis importe-la dans Concurrence locale.';
+  } else if (step2Done && !requiredDealFieldsReady) {
+    nextAction = 'Complète les frais, le temps estimé et la marge minimum souhaitée.';
+  } else if (!step3Done && formObjectFilled && formPriceFilled && formCityFilled && step2Done && requiredDealFieldsReady) {
+    nextAction = 'Clique sur Analyser le deal.';
+  } else if (step3Done) {
+    nextAction = 'Décision prête : vérifie le résumé, les risques et le message vendeur.';
+  }
+
+  const rows = [
+    {
+      title: 'Étape 1 — Analyse de l’annonce',
+      done: step1Done,
+      details: [
+        detectedObject ? `Objet détecté : ${detectedObject}` : '',
+        (detectedPrice != null || formPriceFilled) ? `Prix : ${detectedPrice != null ? `${detectedPrice} $` : `${Number(form.ask)} $`}` : '',
+        (detectedCity || formCityFilled) ? `Ville : ${detectedCity || safeText(form.city, '')}` : ''
+      ].filter(Boolean)
+    },
+    {
+      title: 'Étape 2 — Concurrence locale',
+      done: step2Done,
+      details: [
+        competitionCount != null ? `Nombre d’annonces similaires : ${competitionCount}` : '',
+        competitionLow != null ? `Prix bas : ${competitionLow} $` : '',
+        competitionAvg != null ? `Prix moyen : ${competitionAvg} $` : '',
+        competitionHigh != null ? `Prix haut : ${competitionHigh} $` : ''
+      ].filter(Boolean)
+    },
+    {
+      title: 'Étape 3 — Analyse du deal',
+      done: step3Done,
+      details: [
+        step3Done ? `Décision : ${safeText(resultData?.decision, '')}` : '',
+        step3Done && Number.isFinite(Number(resultData?.score)) ? `Score : ${Number(resultData.score)}` : '',
+        step3Done && Number.isFinite(Number(resultData?.net)) ? `Marge nette : ${money(Number(resultData.net))}` : ''
+      ].filter(Boolean)
+    }
+  ];
+
+  return <section className="guided-journey"><h3>Parcours guidé</h3>{rows.map((row) => <article key={row.title} className="guided-step"><p className="guided-step-title"><span className={`guided-status ${row.done ? 'done' : 'todo'}`}>{row.done ? '✅' : '⬜'}</span>{row.title}</p>{row.details.length > 0 && <ul>{row.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>}</article>)}<p className="guided-next"><strong>Prochaine action :</strong> {nextAction}</p></section>;
+}
 function App() {
   const [mode, setMode] = useState('home');
   const [historyEntries, setHistoryEntries] = useState(() => loadHistory());
@@ -806,6 +873,7 @@ function FlipMode({ onBack, onSaveHistory }) {
   const copy = async ()=>{ if (!showResult) return; await navigator.clipboard.writeText(data.negotiationMessage); setCopied(true); setTimeout(()=>setCopied(false), 1400); };
   return <div>
     <Header title="Mode achat-revente" onBack={onBack} />
+    <GuidedFlipJourney form={form} aiSuggestion={aiSuggestion} competitionResult={competitionResult} competitionAutoUsed={competitionAutoUsed} hasResult={showResult} resultData={data} />
     <section className="photo-block"><h3>Photo de l’objet</h3><p className="field-hint">Tu peux importer une photo de l’objet ou une capture d’écran d’annonce Marketplace.</p><FormField label="Type d’image"><select value={imageType} onChange={(e)=>setImageType(e.target.value)}><option value="object_photo">Photo de l’objet</option><option value="marketplace_screenshot">Capture d’annonce Marketplace</option></select></FormField><label className={photoError ? 'field-error' : ''}>Importer une image<input type="file" accept="image/jpg,image/jpeg,image/png,image/webp" onChange={handlePhotoChange} />{photoError && <span className="field-error-text">{photoError}</span>}</label>{photoPreview && <div className="photo-preview-card"><img src={photoPreview} alt="Aperçu de l’objet" className="photo-preview" /><button type="button" onClick={removePhoto}>Supprimer la photo</button></div>}</section>
     <section className="photo-ai-block"><h3>Analyse photo IA</h3>{!aiLoading && <button type="button" onClick={analyzePhoto}>Analyser la photo</button>}{aiLoading && <p className="photo-note">Analyse en cours…</p>}{aiError && <p className="form-error">{aiError}</p>}{aiSuggestion && <article className="ai-suggestion"><h4>{isMarketplaceSuggestion ? 'Infos détectées dans l’annonce' : 'Suggestion IA'}</h4><section className="ai-section ai-summary"><p className="ai-section-title"><strong>Résumé IA</strong></p><p><strong>{isMarketplaceSuggestion ? 'Titre détecté :' : 'Objet détecté :'}</strong> {aiSuggestion.visibleListingTitle || aiSuggestion.objectName || '—'}</p>{isMarketplaceSuggestion && <p><strong>Prix détecté :</strong> {aiSuggestion.detectedPrice != null ? `${aiSuggestion.detectedPrice} $` : '—'}</p>}{isMarketplaceSuggestion && <p><strong>Ville détectée :</strong> {aiSuggestion.detectedCity || '—'}</p>}<p><strong>Catégorie proposée :</strong> {aiSuggestion.category || '—'}</p><p><strong>État apparent :</strong> {aiSuggestion.condition || '—'}</p>{isMarketplaceSuggestion && <p><strong>Marque / modèle :</strong> {aiSuggestion.brandOrModel || '—'}</p>}{isMarketplaceSuggestion && <p><strong>Description visible :</strong> {aiSuggestion.visibleDescription || '—'}</p>}<p><strong>Confiance :</strong> {aiSuggestion.confidence || '—'}</p></section><details className="ai-section ai-details"><summary><strong>Voir les détails IA</strong></summary><div className="ai-details-content"><p><strong>Mots-clés :</strong> {Array.isArray(aiSuggestion.keywords) ? aiSuggestion.keywords.join(', ') : '—'}</p><p><strong>Description proposée :</strong> {aiSuggestion.description || '—'}</p><div><strong>Risques à vérifier :</strong>{Array.isArray(aiSuggestion.risksToCheck) && aiSuggestion.risksToCheck.length > 0 ? <ul>{aiSuggestion.risksToCheck.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <span> —</span>}</div><div><strong>Questions à poser au vendeur :</strong>{Array.isArray(aiSuggestion.questionsToAsk) && aiSuggestion.questionsToAsk.length > 0 ? <ul>{aiSuggestion.questionsToAsk.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <span> —</span>}</div><div><strong>Accessoires à vérifier :</strong>{Array.isArray(aiSuggestion.accessoriesToCheck) && aiSuggestion.accessoriesToCheck.length > 0 ? <ul>{aiSuggestion.accessoriesToCheck.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <span> —</span>}</div><p><strong>Avertissement IA :</strong> {aiSuggestion.warning || '—'}</p></div></details><button type="button" onClick={useSuggestions}>{isMarketplaceSuggestion ? 'Utiliser les infos de l’annonce' : 'Utiliser ces suggestions'}</button></article>}<SearchQueriesCard suggestion={aiSuggestion} /></section>
     <FormField label="Nom de l’objet" error={errors.name} invalid={!!errors.name}><input value={form.name} onChange={(e)=>{updateFlipField('name', e.target.value); if (errors.name) setErrors({...errors,name:undefined});}}/></FormField>
